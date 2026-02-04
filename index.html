@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#16213e">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="AI-powered teaching assistant for Elders Quorum Come Follow Me lessons">
+  <meta name="description" content="AI-powered teaching and speaking companion">
   <title>Lesson Companion</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -15,15 +15,29 @@
 <body>
   <div id="app">
     <div id="screen-settings" class="screen"></div>
-    <div id="screen-home" class="screen active"></div>
-    <div id="screen-prep" class="screen"></div>
-    <div id="screen-live" class="screen"></div>
-    <div id="screen-summary" class="screen"></div>
+    <div id="screen-lessons" class="screen active"></div>
+    <div id="screen-talks" class="screen"></div>
+    <div id="screen-lesson-prep" class="screen"></div>
+    <div id="screen-lesson-live" class="screen"></div>
+    <div id="screen-lesson-summary" class="screen"></div>
+    <div id="screen-talk-prep" class="screen"></div>
+    <div id="screen-talk-live" class="screen"></div>
+    <div id="screen-talk-summary" class="screen"></div>
   </div>
+
+  <nav class="tab-bar" id="tab-bar">
+    <button class="tab-btn active" data-tab="lessons">
+      <span class="tab-icon">&#128218;</span>
+      <span class="tab-label">Lessons</span>
+    </button>
+    <button class="tab-btn" data-tab="talks">
+      <span class="tab-icon">&#127908;</span>
+      <span class="tab-label">Talks</span>
+    </button>
+  </nav>
 
   <script type="module" src="js/app.js"></script>
   <script>
-    // Register service worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }

@@ -57,80 +57,33 @@ export function formatTime(totalSeconds) {
 }
 
 /**
- * Determine current week's lesson from date.
+ * Render a past session item (lesson or talk) for the tab lists.
  */
-export function getCurrentWeek(lessons) {
-  const now = new Date();
-  const month = now.getMonth(); // 0-indexed
-  const day = now.getDate();
-
-  // Parse date ranges to find the current lesson
-  for (const lesson of lessons) {
-    const range = parseDateRange(lesson.date_range, 2025);
-    if (range && now >= range.start && now <= range.end) {
-      return lesson;
-    }
-  }
-
-  // Fallback: return the first lesson
-  return lessons[0] || null;
-}
-
-function parseDateRange(rangeStr, year) {
-  // Formats: "February 3-9" or "February 24 - March 2"
-  try {
-    const months = {
-      'January': 0, 'February': 1, 'March': 2, 'April': 3,
-      'May': 4, 'June': 5, 'July': 6, 'August': 7,
-      'September': 8, 'October': 9, 'November': 10, 'December': 11
-    };
-
-    const parts = rangeStr.split('-').map(s => s.trim());
-    if (parts.length !== 2) return null;
-
-    // Parse start
-    const startParts = parts[0].split(/\s+/);
-    const startMonth = months[startParts[0]];
-    const startDay = parseInt(startParts[1]);
-
-    // Parse end - might have a month or just a day
-    const endParts = parts[1].split(/\s+/).filter(Boolean);
-    let endMonth, endDay;
-    if (endParts.length >= 2) {
-      endMonth = months[endParts[0]];
-      endDay = parseInt(endParts[1]);
-    } else {
-      endMonth = startMonth;
-      endDay = parseInt(endParts[0]);
-    }
-
-    if (isNaN(startDay) || isNaN(endDay)) return null;
-
-    return {
-      start: new Date(year, startMonth, startDay),
-      end: new Date(year, endMonth, endDay, 23, 59, 59)
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Render a lesson card for the home list.
- */
-export function renderLessonItem(lesson, isCurrent, onClick) {
+export function renderSessionItem(entry, type, onClick) {
   const item = document.createElement('li');
-  item.className = 'lesson-item';
-  if (isCurrent) item.style.borderColor = 'var(--gold-dim)';
+  item.className = 'session-item';
+
+  const dateStr = new Date(entry.createdAt).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric'
+  });
+
+  const title = type === 'lesson' ? entry.title : entry.topic;
+  const meta = type === 'lesson'
+    ? (entry.content ? entry.content.substring(0, 60) + '...' : dateStr)
+    : (entry.scriptures || dateStr);
+
+  const durationStr = entry.duration
+    ? `${Math.floor(entry.duration / 60)}m`
+    : '';
+
   item.innerHTML = `
-    <span class="week-num">W${lesson.week}</span>
-    <div class="lesson-info">
-      <div class="lesson-title">${lesson.title}</div>
-      <div class="lesson-date">${lesson.date_range} &middot; ${lesson.scripture_block}</div>
+    <div class="session-info">
+      <div class="session-title">${title}</div>
+      <div class="session-meta">${dateStr}${durationStr ? ' &middot; ' + durationStr : ''}</div>
     </div>
     <span class="arrow">&rsaquo;</span>
   `;
-  item.addEventListener('click', () => onClick(lesson));
+  item.addEventListener('click', () => onClick(entry));
   return item;
 }
 

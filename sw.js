@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lesson-companion-v1';
+const CACHE_NAME = 'lesson-companion-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -7,7 +7,6 @@ const ASSETS = [
   './js/ai.js',
   './js/speech.js',
   './js/ui.js',
-  './data/lessons.json',
   './manifest.json'
 ];
 
