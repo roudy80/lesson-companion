@@ -273,7 +273,9 @@ class App {
   // --- Lessons Tab ---
 
   renderLessonsTab() {
-    const lessons = this.loadHistory('lc_lessons');
+    const allLessons = this.loadHistory('lc_lessons');
+    const lessons = allLessons.filter(l => !l.archived);
+    const archived = allLessons.filter(l => l.archived);
 
     let html = `
       <div class="header">
@@ -303,11 +305,22 @@ class App {
 
     if (lessons.length > 0) {
       html += '<div class="label">Past Lessons</div><ul class="session-list" id="lesson-list"></ul>';
-    } else {
+    } else if (archived.length === 0) {
       html += `
         <div class="empty-state">
           <div class="icon">&#128218;</div>
           <p>No lessons yet.</p>
+        </div>
+      `;
+    }
+
+    if (archived.length > 0) {
+      html += `
+        <div class="archive-section">
+          <button class="archive-toggle" id="toggle-archived-lessons">
+            <span>&#128193;</span> Archived (${archived.length})
+          </button>
+          <ul class="session-list archived-list hidden" id="archived-lesson-list"></ul>
         </div>
       `;
     }
@@ -342,24 +355,84 @@ class App {
       location.hash = '#lesson-prep';
     });
 
+    // Render active lessons
     if (lessons.length > 0) {
       const list = $('#lesson-list');
       for (const lesson of lessons) {
-        list.appendChild(renderSessionItem(lesson, 'lesson', (l) => {
-          this.currentEntry = { ...l };
-          this.blocks = l.blocks || [];
-          this.chatMessages = [];
-          this.hasNoPlan = false;
-          location.hash = '#lesson-prep';
-        }));
+        list.appendChild(renderSessionItem(
+          lesson,
+          'lesson',
+          (l) => {
+            this.currentEntry = { ...l };
+            this.blocks = l.blocks || [];
+            this.chatMessages = [];
+            this.hasNoPlan = false;
+            location.hash = '#lesson-prep';
+          },
+          (l) => this.deleteSession('lc_lessons', l.id),
+          (l) => this.archiveSession('lc_lessons', l.id)
+        ));
       }
+    }
+
+    // Render archived lessons
+    if (archived.length > 0) {
+      const archivedList = $('#archived-lesson-list');
+      for (const lesson of archived) {
+        archivedList.appendChild(renderSessionItem(
+          lesson,
+          'lesson',
+          (l) => {
+            this.currentEntry = { ...l };
+            this.blocks = l.blocks || [];
+            this.chatMessages = [];
+            this.hasNoPlan = false;
+            location.hash = '#lesson-prep';
+          },
+          (l) => this.deleteSession('lc_lessons', l.id),
+          (l) => this.archiveSession('lc_lessons', l.id)
+        ));
+      }
+
+      $('#toggle-archived-lessons').addEventListener('click', () => {
+        archivedList.classList.toggle('hidden');
+      });
+    }
+  }
+
+  deleteSession(key, id) {
+    const list = this.loadHistory(key);
+    const filtered = list.filter(item => item.id !== id);
+    this.saveHistory(key, filtered);
+    if (key === 'lc_lessons') {
+      this.renderLessonsTab();
+    } else {
+      this.renderTalksTab();
+    }
+    toast('Deleted');
+  }
+
+  archiveSession(key, id) {
+    const list = this.loadHistory(key);
+    const item = list.find(i => i.id === id);
+    if (item) {
+      item.archived = !item.archived;
+      this.saveHistory(key, list);
+      if (key === 'lc_lessons') {
+        this.renderLessonsTab();
+      } else {
+        this.renderTalksTab();
+      }
+      toast(item.archived ? 'Archived' : 'Restored');
     }
   }
 
   // --- Talks Tab ---
 
   renderTalksTab() {
-    const talks = this.loadHistory('lc_talks');
+    const allTalks = this.loadHistory('lc_talks');
+    const talks = allTalks.filter(t => !t.archived);
+    const archived = allTalks.filter(t => t.archived);
 
     let html = `
       <div class="header">
@@ -389,11 +462,22 @@ class App {
 
     if (talks.length > 0) {
       html += '<div class="label">Past Talks</div><ul class="session-list" id="talk-list"></ul>';
-    } else {
+    } else if (archived.length === 0) {
       html += `
         <div class="empty-state">
           <div class="icon">&#127908;</div>
           <p>No talks yet.</p>
+        </div>
+      `;
+    }
+
+    if (archived.length > 0) {
+      html += `
+        <div class="archive-section">
+          <button class="archive-toggle" id="toggle-archived-talks">
+            <span>&#128193;</span> Archived (${archived.length})
+          </button>
+          <ul class="session-list archived-list hidden" id="archived-talk-list"></ul>
         </div>
       `;
     }
@@ -430,17 +514,48 @@ class App {
       location.hash = '#talk-prep';
     });
 
+    // Render active talks
     if (talks.length > 0) {
       const list = $('#talk-list');
       for (const talk of talks) {
-        list.appendChild(renderSessionItem(talk, 'talk', (t) => {
-          this.currentEntry = { ...t };
-          this.blocks = t.blocks || [];
-          this.chatMessages = [];
-          this.hasNoPlan = false;
-          location.hash = '#talk-prep';
-        }));
+        list.appendChild(renderSessionItem(
+          talk,
+          'talk',
+          (t) => {
+            this.currentEntry = { ...t };
+            this.blocks = t.blocks || [];
+            this.chatMessages = [];
+            this.hasNoPlan = false;
+            location.hash = '#talk-prep';
+          },
+          (t) => this.deleteSession('lc_talks', t.id),
+          (t) => this.archiveSession('lc_talks', t.id)
+        ));
       }
+    }
+
+    // Render archived talks
+    if (archived.length > 0) {
+      const archivedList = $('#archived-talk-list');
+      for (const talk of archived) {
+        archivedList.appendChild(renderSessionItem(
+          talk,
+          'talk',
+          (t) => {
+            this.currentEntry = { ...t };
+            this.blocks = t.blocks || [];
+            this.chatMessages = [];
+            this.hasNoPlan = false;
+            location.hash = '#talk-prep';
+          },
+          (t) => this.deleteSession('lc_talks', t.id),
+          (t) => this.archiveSession('lc_talks', t.id)
+        ));
+      }
+
+      $('#toggle-archived-talks').addEventListener('click', () => {
+        archivedList.classList.toggle('hidden');
+      });
     }
   }
 
@@ -996,37 +1111,50 @@ class App {
 
     this.blocks.forEach((block, i) => {
       const item = document.createElement('li');
-      item.className = `block-item type-${block.type}${this.expandedBlockIndex === i ? ' expanded' : ''}`;
+      const isExpanded = this.expandedBlockIndex === i;
+      item.className = `prep-block-tile type-${block.type}${isExpanded ? ' editing' : ''}`;
       item.draggable = true;
       item.dataset.index = i;
 
-      const isExpanded = this.expandedBlockIndex === i;
-
-      item.innerHTML = `
-        <div class="block-header">
-          <span class="drag-handle">&#9776;</span>
-          <span class="block-type-badge">${block.type}</span>
-          <div class="block-content">${block.content}</div>
-          <div class="block-actions">
-            <button class="expand" title="Expand">&#9660;</button>
-            <button class="delete" title="Delete">&times;</button>
+      if (isExpanded) {
+        // Edit mode - show form
+        item.innerHTML = `
+          <div class="prep-block-edit">
+            <div class="prep-block-header">
+              <span class="drag-handle">&#9776;</span>
+              <span class="block-type-badge">${block.type}</span>
+              <button class="delete-btn" title="Delete">&times;</button>
+            </div>
+            <div class="input-group">
+              <label>Content</label>
+              <input type="text" class="block-content-input" value="${block.content}">
+            </div>
+            <div class="input-group">
+              <label>Your Notes / Script</label>
+              <textarea class="block-notes-input" placeholder="What you want to say...">${block.notes || ''}</textarea>
+            </div>
+            ${block.detail ? `<div class="block-ai-detail">${block.detail}</div>` : ''}
+            <div class="prep-block-actions">
+              <button class="btn btn-sm btn-ghost cancel-btn">Cancel</button>
+              <button class="btn btn-sm btn-primary save-btn">Save</button>
+            </div>
           </div>
-        </div>
-        ${isExpanded ? `
-        <div class="block-expanded">
-          <div class="input-group">
-            <label>Content</label>
-            <input type="text" class="block-content-input" value="${block.content}">
+        `;
+      } else {
+        // Display mode - looks like live tile
+        item.innerHTML = `
+          <div class="prep-block-display">
+            <div class="prep-block-header">
+              <span class="drag-handle">&#9776;</span>
+              <span class="block-type-badge">${block.type}</span>
+              <button class="delete-btn" title="Delete">&times;</button>
+            </div>
+            <div class="block-content">${block.content}</div>
+            ${block.notes ? `<div class="block-notes-visible">${block.notes}</div>` : ''}
+            ${block.detail ? `<div class="block-detail">${block.detail}</div>` : ''}
           </div>
-          <div class="input-group">
-            <label>Your Notes / Script</label>
-            <textarea class="block-notes-input" placeholder="What you want to say...">${block.notes || ''}</textarea>
-          </div>
-          ${block.detail ? `<div class="block-detail-display">${block.detail}</div>` : ''}
-          <button class="btn btn-sm btn-primary save-block-btn">Save</button>
-        </div>
-        ` : (block.notes ? `<div class="block-notes-preview">${block.notes}</div>` : '')}
-      `;
+        `;
+      }
 
       // Drag events
       item.addEventListener('dragstart', (e) => {
@@ -1038,7 +1166,7 @@ class App {
       item.addEventListener('dragend', () => {
         item.classList.remove('dragging');
         this.draggedBlockIndex = null;
-        document.querySelectorAll('.block-item.drag-over').forEach(el => el.classList.remove('drag-over'));
+        document.querySelectorAll('.prep-block-tile.drag-over').forEach(el => el.classList.remove('drag-over'));
       });
 
       item.addEventListener('dragover', (e) => {
@@ -1063,15 +1191,8 @@ class App {
         }
       });
 
-      // Expand/collapse
-      item.querySelector('.expand').addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.expandedBlockIndex = this.expandedBlockIndex === i ? null : i;
-        this.renderBlocks();
-      });
-
-      // Delete
-      item.querySelector('.delete').addEventListener('click', (e) => {
+      // Delete button
+      item.querySelector('.delete-btn').addEventListener('click', (e) => {
         e.stopPropagation();
         this.deletedBlock = { index: i, block: this.blocks[i] };
         this.blocks.splice(i, 1);
@@ -1087,13 +1208,27 @@ class App {
         this.renderTimeEstimate();
       });
 
-      // Save expanded
       if (isExpanded) {
-        item.querySelector('.save-block-btn').addEventListener('click', (e) => {
+        // Cancel edit
+        item.querySelector('.cancel-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.expandedBlockIndex = null;
+          this.renderBlocks();
+        });
+
+        // Save edit
+        item.querySelector('.save-btn').addEventListener('click', (e) => {
           e.stopPropagation();
           block.content = item.querySelector('.block-content-input').value.trim() || block.content;
           block.notes = item.querySelector('.block-notes-input').value.trim();
           this.expandedBlockIndex = null;
+          this.renderBlocks();
+        });
+      } else {
+        // Click to edit (on display area, not drag handle)
+        item.querySelector('.prep-block-display').addEventListener('click', (e) => {
+          if (e.target.closest('.drag-handle') || e.target.closest('.delete-btn')) return;
+          this.expandedBlockIndex = i;
           this.renderBlocks();
         });
       }

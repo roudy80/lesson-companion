@@ -59,7 +59,7 @@ export function formatTime(totalSeconds) {
 /**
  * Render a past session item (lesson or talk) for the tab lists.
  */
-export function renderSessionItem(entry, type, onClick) {
+export function renderSessionItem(entry, type, onClick, onDelete, onArchive) {
   const item = document.createElement('li');
   item.className = 'session-item';
 
@@ -68,22 +68,42 @@ export function renderSessionItem(entry, type, onClick) {
   });
 
   const title = type === 'lesson' ? entry.title : entry.topic;
-  const meta = type === 'lesson'
-    ? (entry.content ? entry.content.substring(0, 60) + '...' : dateStr)
-    : (entry.scriptures || dateStr);
 
   const durationStr = entry.duration
     ? `${Math.floor(entry.duration / 60)}m`
     : '';
 
   item.innerHTML = `
-    <div class="session-info">
-      <div class="session-title">${title}</div>
-      <div class="session-meta">${dateStr}${durationStr ? ' &middot; ' + durationStr : ''}</div>
+    <div class="session-main">
+      <div class="session-info">
+        <div class="session-title">${title || 'Untitled'}</div>
+        <div class="session-meta">${dateStr}${durationStr ? ' &middot; ' + durationStr : ''}</div>
+      </div>
+      <div class="session-actions">
+        ${onArchive ? `<button class="session-btn archive-btn" title="${entry.archived ? 'Unarchive' : 'Archive'}">${entry.archived ? '↩' : '📁'}</button>` : ''}
+        ${onDelete ? '<button class="session-btn delete-btn" title="Delete">🗑</button>' : ''}
+      </div>
     </div>
-    <span class="arrow">&rsaquo;</span>
   `;
-  item.addEventListener('click', () => onClick(entry));
+
+  item.querySelector('.session-info').addEventListener('click', () => onClick(entry));
+
+  if (onArchive) {
+    item.querySelector('.archive-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onArchive(entry);
+    });
+  }
+
+  if (onDelete) {
+    item.querySelector('.delete-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm('Delete this permanently?')) {
+        onDelete(entry);
+      }
+    });
+  }
+
   return item;
 }
 

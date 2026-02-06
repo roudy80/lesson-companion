@@ -505,22 +505,62 @@ select {
 .session-list { list-style: none; }
 
 .session-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
   padding: 14px 16px;
   background: var(--bg-surface);
   border-radius: var(--radius-sm);
   margin-bottom: 8px;
-  cursor: pointer;
   border: 1px solid rgba(255,255,255,0.04);
 }
 
 .session-item:hover { background: var(--bg-card); }
-.session-item .session-info { flex: 1; min-width: 0; }
-.session-item .session-title { font-weight: 600; font-size: 0.9375rem; }
-.session-item .session-meta { font-size: 0.8125rem; color: var(--text-muted); }
-.session-item .arrow { color: var(--text-muted); }
+
+.session-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.session-info { flex: 1; min-width: 0; cursor: pointer; }
+.session-title { font-weight: 600; font-size: 0.9375rem; color: var(--text-primary); }
+.session-meta { font-size: 0.8125rem; color: var(--text-muted); margin-top: 2px; }
+
+.session-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.session-btn {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 6px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.session-btn:hover { opacity: 1; }
+
+/* Archive Section */
+.archive-section { margin-top: 20px; }
+
+.archive-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 10px 0;
+  width: 100%;
+}
+
+.archive-toggle:hover { color: var(--text-secondary); }
+
+.archived-list { margin-top: 8px; }
+.archived-list .session-item { opacity: 0.7; }
 
 .new-session-btn {
   display: flex;
@@ -542,6 +582,111 @@ select {
 /* === Block List === */
 .block-list { list-style: none; }
 
+/* Prep Block Tiles - Like Live View */
+.prep-block-tile {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  border-left: 4px solid var(--text-muted);
+  overflow: hidden;
+}
+
+.prep-block-tile.type-point { border-left-color: var(--accent); }
+.prep-block-tile.type-scripture { border-left-color: var(--gold); }
+.prep-block-tile.type-question { border-left-color: var(--success); }
+.prep-block-tile.type-quote { border-left-color: #a855f7; }
+.prep-block-tile.type-note { border-left-color: var(--text-muted); }
+
+.prep-block-tile.dragging { opacity: 0.5; }
+.prep-block-tile.drag-over { border-top: 3px solid var(--gold); }
+
+.prep-block-display {
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.prep-block-display:hover { background: rgba(255,255,255,0.02); }
+
+.prep-block-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.prep-block-header .drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+
+.prep-block-header .delete-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.prep-block-header .delete-btn:hover { color: var(--danger); }
+
+.prep-block-tile .block-content {
+  color: var(--text-bright);
+  font-size: 1rem;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+.prep-block-tile .block-notes-visible {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.prep-block-tile .block-detail {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-style: italic;
+}
+
+/* Prep Block Edit Mode */
+.prep-block-edit {
+  padding: 14px 16px;
+}
+
+.prep-block-edit .input-group { margin-bottom: 12px; }
+.prep-block-edit input, .prep-block-edit textarea {
+  background: var(--bg-secondary);
+  font-size: 0.9375rem;
+}
+
+.prep-block-edit textarea { min-height: 80px; }
+
+.block-ai-detail {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: rgba(255,255,255,0.02);
+  border-radius: var(--radius-sm);
+}
+
+.prep-block-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* Old block-item styles (fallback) */
 .block-item {
   padding: 14px 16px;
   background: var(--bg-secondary);
