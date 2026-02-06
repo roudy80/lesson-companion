@@ -49,39 +49,171 @@ export class AI {
   }
 
   /**
-   * Generate flexible blocks for lesson planning.
-   * Returns mix of points, scriptures, questions, quotes.
+   * Fetch and parse content from a URL (conference talk, etc.)
+   */
+  async fetchUrlContent(url) {
+    const prompt = `Fetch and summarize the content from this URL for lesson/talk preparation.
+
+URL: ${url}
+
+If this is a church talk or lesson material, extract:
+1. The title
+2. The speaker/author (if applicable)
+3. The main content/text
+
+Format as JSON:
+{
+  "title": "Talk or lesson title",
+  "author": "Speaker name or empty string",
+  "content": "The main text content, summarized if very long (keep under 2000 chars)",
+  "success": true
+}
+
+If you cannot access or parse the URL, return:
+{
+  "title": "",
+  "author": "",
+  "content": "",
+  "success": false,
+  "error": "Reason for failure"
+}
+
+Return ONLY valid JSON.`;
+
+    const text = await this.call(prompt, { maxTokens: 2500 });
+    try {
+      return this._parseJSON(text);
+    } catch {
+      return { success: false, error: 'Failed to parse response' };
+    }
+  }
+
+  /**
+   * Chat-based collaborative planning for lessons.
+   */
+  async chatPlanLesson(message, currentBlocks, context) {
+    const blocksJson = JSON.stringify(currentBlocks, null, 2);
+
+    const prompt = `You are a collaborative lesson planning assistant for LDS Elders Quorum lessons.
+
+Current lesson context:
+- Title: "${context.title || 'Untitled'}"
+- Content/Notes: "${context.content || 'None yet'}"
+
+Current outline blocks:
+${currentBlocks.length > 0 ? blocksJson : 'No blocks yet.'}
+
+User's message: "${message}"
+
+Respond conversationally AND update the blocks if needed. Your response format:
+{
+  "reply": "Your conversational response to the user (1-3 sentences)",
+  "blocks": [
+    { "type": "point", "content": "...", "detail": "..." },
+    { "type": "scripture", "content": "Reference", "detail": "Context" },
+    { "type": "question", "content": "...", "detail": "" }
+  ],
+  "blocksChanged": true or false
+}
+
+Block types: point, scripture, question, quote, note
+
+Guidelines:
+- If user asks to add/remove/change blocks, do it and set blocksChanged: true
+- If user just asks a question or chats, reply helpfully and return existing blocks with blocksChanged: false
+- Keep blocks concise (1-2 sentences each)
+- Be helpful and collaborative, not formal
+
+Return ONLY valid JSON.`;
+
+    const text = await this.call(prompt, { maxTokens: 1500 });
+    try {
+      return this._parseJSON(text);
+    } catch {
+      return {
+        reply: "I had trouble processing that. Could you try rephrasing?",
+        blocks: currentBlocks,
+        blocksChanged: false
+      };
+    }
+  }
+
+  /**
+   * Chat-based collaborative planning for talks.
+   */
+  async chatPlanTalk(message, currentBlocks, context) {
+    const blocksJson = JSON.stringify(currentBlocks, null, 2);
+
+    const prompt = `You are a collaborative talk planning assistant for LDS church talks.
+
+Current talk context:
+- Topic: "${context.topic || 'Untitled'}"
+- Scriptures: "${context.scriptures || 'None specified'}"
+- Duration: ${context.duration || 10} minutes
+- Notes: "${context.content || 'None yet'}"
+
+Current outline blocks:
+${currentBlocks.length > 0 ? blocksJson : 'No blocks yet.'}
+
+User's message: "${message}"
+
+Respond conversationally AND update the blocks if needed. Your response format:
+{
+  "reply": "Your conversational response (1-3 sentences)",
+  "blocks": [
+    { "type": "point", "content": "...", "detail": "..." },
+    { "type": "scripture", "content": "Reference", "detail": "Context" }
+  ],
+  "blocksChanged": true or false
+}
+
+Block types: point, scripture, question, quote, note
+
+Guidelines:
+- If user asks to add/remove/change blocks, do it and set blocksChanged: true
+- Keep the talk appropriately sized for ${context.duration || 10} minutes
+- Be helpful and encouraging
+- Keep blocks concise
+
+Return ONLY valid JSON.`;
+
+    const text = await this.call(prompt, { maxTokens: 1500 });
+    try {
+      return this._parseJSON(text);
+    } catch {
+      return {
+        reply: "I had trouble processing that. Could you try rephrasing?",
+        blocks: currentBlocks,
+        blocksChanged: false
+      };
+    }
+  }
+
+  /**
+   * Generate initial blocks for lesson (used when user wants quick generation).
    */
   async generateLessonBlocks(title, content) {
     const prompt = `You are a teaching assistant helping prepare an Elders Quorum discussion lesson.
 
-The teacher has provided:
 Title: "${title}"
 Content/Notes: "${content}"
 
-Generate a lesson outline as flexible blocks. Include a MIX of:
-- point: Key ideas to discuss (most important)
-- scripture: Relevant scripture references with brief context
+Generate a lesson outline as blocks. Include a MIX of:
+- point: Key ideas to discuss
+- scripture: Relevant scripture references
 - question: Discussion questions
-- quote: Relevant conference talk quotes (optional)
+- quote: Conference talk quotes (optional)
 
 Format as JSON:
 {
   "blocks": [
-    { "type": "point", "content": "Main idea here", "detail": "Optional supporting detail" },
+    { "type": "point", "content": "Main idea", "detail": "Supporting detail" },
     { "type": "scripture", "content": "Alma 32:21", "detail": "Faith is not a perfect knowledge" },
-    { "type": "question", "content": "How can we apply this?", "detail": "" },
-    { "type": "quote", "content": "Quote text here", "detail": "Speaker name, talk title" }
+    { "type": "question", "content": "Discussion question?", "detail": "" }
   ]
 }
 
-Guidelines:
-- Generate 5-8 blocks total
-- Start with a key point, mix in scriptures and questions throughout
-- Make it practical and applicable to daily life
-- Keep each block concise (1-2 sentences max)
-
-Return ONLY valid JSON.`;
+Generate 5-8 blocks. Keep each concise. Return ONLY valid JSON.`;
 
     const text = await this.call(prompt);
     try {
@@ -92,39 +224,29 @@ Return ONLY valid JSON.`;
   }
 
   /**
-   * Generate talk outline with duration awareness.
+   * Generate initial blocks for talk.
    */
   async generateTalkBlocks(topic, scriptures, existingContent, durationMinutes) {
-    const prompt = `You are a speaking coach helping prepare a ${durationMinutes}-minute talk for an LDS church meeting.
+    const prompt = `You are a speaking coach helping prepare a ${durationMinutes}-minute talk.
 
 Topic: "${topic}"
-Scriptures to include: "${scriptures || 'None specified'}"
-${existingContent ? `Existing draft/notes:\n"${existingContent}"` : 'No existing content yet.'}
+Scriptures: "${scriptures || 'None specified'}"
+Notes: "${existingContent || 'None'}"
 
-Generate a talk outline as blocks that fits in ${durationMinutes} minutes. Include:
-- point: Main ideas and talking points
-- scripture: Scripture references to read or cite
-- quote: Conference talk quotes (optional)
-- note: Personal reminders or transitions
+Generate a talk outline as blocks for ${durationMinutes} minutes (~${Math.ceil(durationMinutes / 2)} blocks).
 
 Format as JSON:
 {
   "blocks": [
-    { "type": "point", "content": "Opening hook or story", "detail": "Introduce the topic" },
-    { "type": "scripture", "content": "Scripture reference", "detail": "Key verse text or context" },
-    { "type": "point", "content": "Main point", "detail": "Supporting explanation" },
-    { "type": "note", "content": "Bear testimony here", "detail": "" }
+    { "type": "point", "content": "Opening/intro", "detail": "Hook or story" },
+    { "type": "scripture", "content": "Reference", "detail": "Key verse" },
+    { "type": "point", "content": "Main point", "detail": "Explanation" },
+    { "type": "note", "content": "Bear testimony", "detail": "" }
   ],
   "estimatedMinutes": ${durationMinutes}
 }
 
-Guidelines:
-- For ${durationMinutes} min talk: ~${Math.ceil(durationMinutes / 2)} blocks
-- Include intro, 2-3 main points, and conclusion
-- Keep blocks concise - these are prompts, not full paragraphs
-- End with testimony/call to action
-
-Return ONLY valid JSON.`;
+Keep blocks concise. Return ONLY valid JSON.`;
 
     const text = await this.call(prompt, { maxTokens: 1500 });
     try {
@@ -139,80 +261,70 @@ Return ONLY valid JSON.`;
    */
   async generateLiveSuggestion(transcript, currentEntry, currentBlock, hasNoPlan = false) {
     const contextInfo = hasNoPlan
-      ? 'Free-form gospel discussion with no specific lesson plan.'
+      ? 'Free-form gospel discussion.'
       : `Lesson: "${currentEntry?.title || 'Gospel Discussion'}"\nCurrent topic: ${currentBlock || 'Open discussion'}`;
 
-    const prompt = `You are a real-time teaching assistant for an LDS Elders Quorum lesson. You have deep knowledge of LDS scriptures, General Conference talks, handbooks, and gospel doctrine.
+    const prompt = `You are a real-time teaching assistant for an LDS Elders Quorum lesson.
 
 ${contextInfo}
 
 Recent discussion (last 15 seconds):
 "${transcript}"
 
-Provide ONE helpful suggestion. Choose the most appropriate:
-
-1. **scripture** - Someone mentioned a story/scripture but can't place it? Identify the reference.
-2. **doctrine** - Hard doctrinal question? Brief answer from official sources + pivot back to lesson.
-3. **question** - Good follow-up question to deepen discussion.
-4. **redirect** - Discussion wandered? Gentle way to refocus.
+Provide ONE helpful suggestion:
+1. **scripture** - Identify a referenced story/scripture
+2. **doctrine** - Answer a hard question + pivot back
+3. **question** - Follow-up question
+4. **redirect** - Gentle refocus
 
 Format as JSON:
 {
   "type": "scripture" | "doctrine" | "question" | "redirect",
   "suggestion": "Main point (1 line)",
   "bullets": ["bullet 1", "bullet 2"],
-  "reference": "Scripture or source if applicable"
+  "reference": "Source if applicable"
 }
 
-RULES:
-- Max 2 short bullets
-- Keep it scannable, no paragraphs
-- Return ONLY valid JSON`;
+Max 2 bullets. Return ONLY valid JSON.`;
 
     const text = await this.call(prompt, { maxTokens: 300, temperature: 0.6 });
     try {
       return this._parseJSON(text);
     } catch {
-      return { type: 'question', suggestion: 'What has stood out to you from this discussion?', bullets: [], reference: '' };
+      return { type: 'question', suggestion: 'What has stood out to you?', bullets: [], reference: '' };
     }
   }
 
   /**
-   * Generate immediate help when user taps "I need help" button.
+   * Generate immediate help.
    */
   async generateImmediateHelp(transcript, currentEntry, currentBlock, hasNoPlan = false) {
     const contextInfo = hasNoPlan
-      ? 'Free-form gospel discussion, no lesson plan.'
-      : `Lesson: "${currentEntry?.title || 'Gospel Discussion'}"\nCurrent topic: ${currentBlock || 'Open discussion'}`;
+      ? 'Free-form gospel discussion.'
+      : `Lesson: "${currentEntry?.title || 'Discussion'}"\nTopic: ${currentBlock || 'Open'}`;
 
-    const prompt = `You are helping a Sunday School teacher who just pressed "I need help" during their lesson.
+    const prompt = `Help a Sunday School teacher who pressed "I need help".
 
 ${contextInfo}
 
-What they've been discussing:
+Recent discussion:
 "${transcript}"
 
-The teacher needs immediate, actionable help. Provide ONE of:
-1. A question to restart stalled discussion
-2. A relevant scripture to share
-3. A story or example to illustrate the point
-4. A way to transition to the next topic
-
-Format as JSON:
+Provide immediate, actionable help:
 {
   "type": "help",
-  "suggestion": "What to do right now (1 line)",
-  "bullets": ["specific action or talking point", "optional second point"],
-  "reference": "Scripture reference if applicable"
+  "suggestion": "What to do right now",
+  "bullets": ["action 1", "action 2"],
+  "reference": "Scripture if applicable"
 }
 
-Keep it brief and immediately actionable. Return ONLY valid JSON.`;
+Return ONLY valid JSON.`;
 
     const text = await this.call(prompt, { maxTokens: 250, temperature: 0.7 });
     try {
       return this._parseJSON(text);
     } catch {
-      return { type: 'help', suggestion: 'Ask: "What questions do you have about what we\'ve discussed?"', bullets: [], reference: '' };
+      return { type: 'help', suggestion: 'Ask: "What questions do you have?"', bullets: [], reference: '' };
     }
   }
 
@@ -220,55 +332,49 @@ Keep it brief and immediately actionable. Return ONLY valid JSON.`;
    * Generate a delivery suggestion during a talk.
    */
   async generateTalkDeliverySuggestion(transcript, talkContent, currentSection) {
-    const prompt = `You are a real-time speaking coach for someone delivering a talk at church.
+    const prompt = `Speaking coach for a church talk.
 
 Current section: "${currentSection}"
-Talk content (abbreviated): "${talkContent.substring(0, 600)}"
+Talk: "${talkContent.substring(0, 600)}"
 
 Recent transcript:
 "${transcript}"
 
-Give ONE brief delivery suggestion:
-- Pacing (slow down, pause)
-- Transition to next point
-- Emphasis tip
-- Encouragement
-
-Format as JSON:
+Give ONE delivery tip:
 {
   "type": "pacing" | "transition" | "emphasis" | "encouragement",
-  "suggestion": "Main advice (1 line)",
-  "bullets": ["specific tip"]
+  "suggestion": "Main advice",
+  "bullets": ["tip"]
 }
 
-Max 2 bullets. Return ONLY valid JSON.`;
+Return ONLY valid JSON.`;
 
     const text = await this.call(prompt, { maxTokens: 200, temperature: 0.6 });
     try {
       return this._parseJSON(text);
     } catch {
-      return { type: 'encouragement', suggestion: 'You\'re doing great. Make eye contact and breathe.', bullets: [] };
+      return { type: 'encouragement', suggestion: 'You\'re doing great.', bullets: [] };
     }
   }
 
   /**
-   * Generate a post-lesson summary.
+   * Generate lesson summary.
    */
   async generateLessonSummary(title, transcript, coveredBlocks, totalBlocks, durationMinutes) {
     const prompt = `Summarize this Elders Quorum lesson.
 
-Lesson: "${title || 'Gospel Discussion'}"
-Duration: ${durationMinutes} minutes
-Blocks covered: ${coveredBlocks} of ${totalBlocks}
+Lesson: "${title || 'Discussion'}"
+Duration: ${durationMinutes} min
+Blocks: ${coveredBlocks}/${totalBlocks}
 
 Transcript:
 "${transcript}"
 
-Format as JSON:
+Format:
 {
   "themes": ["theme 1", "theme 2"],
-  "insights": "Key insight from discussion",
-  "followUp": ["suggestion for next week"]
+  "insights": "Key insight",
+  "followUp": ["suggestion"]
 }
 
 Return ONLY valid JSON.`;
@@ -282,23 +388,23 @@ Return ONLY valid JSON.`;
   }
 
   /**
-   * Generate a post-talk delivery assessment.
+   * Generate talk summary.
    */
   async generateTalkSummary(topic, transcript, durationMinutes) {
-    const prompt = `Review this church talk delivery.
+    const prompt = `Review this church talk.
 
 Topic: "${topic}"
-Duration: ${durationMinutes} minutes
+Duration: ${durationMinutes} min
 
 Transcript:
 "${transcript}"
 
-Format as JSON:
+Format:
 {
-  "assessment": "Overall assessment (1-2 sentences)",
-  "strengths": ["strength 1", "strength 2"],
-  "improvements": ["area 1", "area 2"],
-  "encouragement": "Encouraging note"
+  "assessment": "Overall (1-2 sentences)",
+  "strengths": ["strength 1"],
+  "improvements": ["area 1"],
+  "encouragement": "Note"
 }
 
 Return ONLY valid JSON.`;
@@ -312,17 +418,15 @@ Return ONLY valid JSON.`;
   }
 
   /**
-   * Transcribe audio and generate a live suggestion in one call.
+   * Transcribe audio and suggest.
    */
   async transcribeAndSuggest(base64Audio, mimeType, currentEntry, currentBlock, mode = 'lesson', hasNoPlan = false) {
     const key = this.getApiKey();
     if (!key) throw new Error('No API key configured');
 
     const contextInfo = mode === 'lesson'
-      ? (hasNoPlan
-          ? 'Free-form gospel discussion.'
-          : `Lesson: "${currentEntry?.title || 'Gospel Discussion'}"\nCurrent topic: ${currentBlock}`)
-      : `Talk: "${currentEntry?.topic || 'Gospel Talk'}"\nCurrent section: ${currentBlock}`;
+      ? (hasNoPlan ? 'Free-form discussion.' : `Lesson: "${currentEntry?.title}"\nTopic: ${currentBlock}`)
+      : `Talk: "${currentEntry?.topic}"\nSection: ${currentBlock}`;
 
     const suggestionTypes = mode === 'lesson'
       ? '"scripture" | "doctrine" | "question" | "redirect"'
@@ -332,37 +436,26 @@ Return ONLY valid JSON.`;
     const body = {
       contents: [{
         parts: [
+          { inlineData: { mimeType, data: base64Audio } },
           {
-            inlineData: {
-              mimeType: mimeType,
-              data: base64Audio
-            }
-          },
-          {
-            text: `You are a real-time assistant with LDS gospel knowledge.
+            text: `Real-time assistant.
 
 ${contextInfo}
 
-Transcribe the audio, then suggest ONE helpful thing.
-
-Format as JSON:
+Transcribe audio, then suggest:
 {
   "transcript": "what was said",
   "type": ${suggestionTypes},
-  "suggestion": "Main point (1 line)",
-  "bullets": ["bullet 1"],
-  "reference": "Source if applicable"
+  "suggestion": "Main point",
+  "bullets": ["bullet"],
+  "reference": "Source"
 }
 
-Max 2 bullets. If audio is silent, set transcript and suggestion to "".
-Return ONLY valid JSON.`
+If silent, return empty strings. Return ONLY valid JSON.`
           }
         ]
       }],
-      generationConfig: {
-        temperature: 0.6,
-        maxOutputTokens: 350
-      }
+      generationConfig: { temperature: 0.6, maxOutputTokens: 350 }
     };
 
     const res = await fetch(url, {
@@ -391,7 +484,7 @@ Return ONLY valid JSON.`
   async validateKey(key) {
     const url = `${this.baseUrl}/${this.model}:generateContent?key=${key}`;
     const body = {
-      contents: [{ parts: [{ text: 'Reply with the word "ok"' }] }],
+      contents: [{ parts: [{ text: 'Reply "ok"' }] }],
       generationConfig: { maxOutputTokens: 8 }
     };
 

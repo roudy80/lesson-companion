@@ -16,6 +16,8 @@ class App {
     this.hasNoPlan = false;
     this.helpRequested = false;
     this.talkDuration = 10; // default talk duration in minutes
+    this.engagementLevel = 'moderate'; // 'talkative' | 'moderate' | 'quiet'
+    this.chatMessages = []; // chat history for collaborative planning
   }
 
   init() {
@@ -77,6 +79,57 @@ class App {
         talks.unshift(entry);
       }
       this.saveHistory('lc_talks', talks);
+    }
+  }
+
+  // --- Time Estimation ---
+
+  calculateTimeEstimate() {
+    if (this.blocks.length === 0) return { min: 0, max: 0 };
+
+    // Base times per block type (in minutes)
+    const baseTimes = {
+      point: { min: 2, max: 4 },
+      scripture: { min: 2, max: 5 },
+      question: { min: 3, max: 8 },
+      quote: { min: 1, max: 3 },
+      note: { min: 0.5, max: 1 }
+    };
+
+    // Engagement multipliers
+    const multipliers = {
+      talkative: { min: 1.3, max: 1.8 },
+      moderate: { min: 1.0, max: 1.0 },
+      quiet: { min: 0.6, max: 0.7 }
+    };
+
+    const mult = multipliers[this.engagementLevel] || multipliers.moderate;
+    let totalMin = 0;
+    let totalMax = 0;
+
+    for (const block of this.blocks) {
+      const times = baseTimes[block.type] || baseTimes.point;
+      totalMin += times.min * mult.min;
+      totalMax += times.max * mult.max;
+    }
+
+    return {
+      min: Math.round(totalMin),
+      max: Math.round(totalMax)
+    };
+  }
+
+  renderTimeEstimate() {
+    const el = $('#time-estimate');
+    if (!el) return;
+
+    const est = this.calculateTimeEstimate();
+    if (est.min === 0 && est.max === 0) {
+      el.innerHTML = '<span class="time-value">--</span> min';
+    } else if (est.min === est.max) {
+      el.innerHTML = `<span class="time-value">~${est.min}</span> min`;
+    } else {
+      el.innerHTML = `<span class="time-value">${est.min}-${est.max}</span> min`;
     }
   }
 
@@ -279,6 +332,7 @@ class App {
         createdAt: new Date().toISOString()
       };
       this.blocks = [];
+      this.chatMessages = [];
       this.hasNoPlan = false;
       location.hash = '#lesson-prep';
     });
@@ -289,6 +343,7 @@ class App {
         list.appendChild(renderSessionItem(lesson, 'lesson', (l) => {
           this.currentEntry = { ...l };
           this.blocks = l.blocks || [];
+          this.chatMessages = [];
           this.hasNoPlan = false;
           location.hash = '#lesson-prep';
         }));
@@ -365,6 +420,7 @@ class App {
         createdAt: new Date().toISOString()
       };
       this.blocks = [];
+      this.chatMessages = [];
       this.hasNoPlan = false;
       location.hash = '#talk-prep';
     });
@@ -375,6 +431,7 @@ class App {
         list.appendChild(renderSessionItem(talk, 'talk', (t) => {
           this.currentEntry = { ...t };
           this.blocks = t.blocks || [];
+          this.chatMessages = [];
           this.hasNoPlan = false;
           location.hash = '#talk-prep';
         }));
@@ -406,17 +463,30 @@ class App {
               value="${entry.title || ''}">
           </div>
           <div class="input-group">
-            <label for="lesson-content-input">Content / Notes (optional)</label>
-            <textarea id="lesson-content-input" placeholder="Paste talk content, scriptures, or notes for AI to use...">${entry.content || ''}</textarea>
+            <label for="lesson-url-input">Conference Talk URL (optional)</label>
+            <div class="url-input-row">
+              <input type="url" id="lesson-url-input" placeholder="Paste churchofjesuschrist.org URL...">
+              <button class="btn btn-sm" id="fetch-url-btn" ${!this.ai.hasApiKey() ? 'disabled' : ''}>Fetch</button>
+            </div>
           </div>
-          <button class="btn btn-secondary btn-block" id="generate-blocks-btn"
-            ${!this.ai.hasApiKey() ? 'disabled' : ''}>
-            Generate Outline
-          </button>
+          <div class="input-group">
+            <label for="lesson-content-input">Content / Notes</label>
+            <textarea id="lesson-content-input" placeholder="Paste talk content, scriptures, or notes...">${entry.content || ''}</textarea>
+          </div>
         </div>
 
         <div class="prep-section">
-          <h3>Lesson Outline</h3>
+          <div class="prep-section-header">
+            <h3>Lesson Outline</h3>
+            <div class="time-estimate" id="time-estimate">
+              <span class="time-value">--</span> min
+            </div>
+          </div>
+          <div class="engagement-toggle" id="engagement-toggle">
+            <button class="engagement-option ${this.engagementLevel === 'quiet' ? 'selected' : ''}" data-level="quiet">Quiet</button>
+            <button class="engagement-option ${this.engagementLevel === 'moderate' ? 'selected' : ''}" data-level="moderate">Moderate</button>
+            <button class="engagement-option ${this.engagementLevel === 'talkative' ? 'selected' : ''}" data-level="talkative">Talkative</button>
+          </div>
           <div class="add-block-row">
             <button class="add-block-btn" data-type="point">+ Point</button>
             <button class="add-block-btn" data-type="scripture">+ Scripture</button>
@@ -425,6 +495,17 @@ class App {
             <button class="add-block-btn" data-type="note">+ Note</button>
           </div>
           <ul class="block-list" id="block-list"></ul>
+        </div>
+
+        <div class="chat-container">
+          <div class="chat-header">
+            <h3>&#128172; Plan with AI</h3>
+          </div>
+          <div class="chat-messages" id="chat-messages"></div>
+          <div class="chat-input-row">
+            <input type="text" id="chat-input" placeholder="Ask AI to help plan your lesson..." ${!this.ai.hasApiKey() ? 'disabled' : ''}>
+            <button class="btn btn-primary btn-sm" id="chat-send-btn" ${!this.ai.hasApiKey() ? 'disabled' : ''}>Send</button>
+          </div>
         </div>
 
         <div class="divider">ready?</div>
@@ -441,6 +522,53 @@ class App {
 
     showScreen('screen-lesson-prep');
     this.renderBlocks();
+    this.renderTimeEstimate();
+    this.renderChatMessages();
+
+    // Engagement toggle
+    document.querySelectorAll('.engagement-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.engagement-option').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        this.engagementLevel = btn.dataset.level;
+        this.renderTimeEstimate();
+      });
+    });
+
+    // Fetch URL
+    $('#fetch-url-btn').addEventListener('click', async () => {
+      const url = $('#lesson-url-input').value.trim();
+      if (!url) {
+        toast('Enter a URL first');
+        return;
+      }
+
+      const btn = $('#fetch-url-btn');
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      try {
+        const result = await this.ai.fetchUrlContent(url);
+        if (result.success) {
+          if (result.title && !$('#lesson-title-input').value.trim()) {
+            $('#lesson-title-input').value = result.title;
+            this.currentEntry.title = result.title;
+          }
+          if (result.content) {
+            $('#lesson-content-input').value = result.content;
+            this.currentEntry.content = result.content;
+          }
+          toast('Content loaded');
+        } else {
+          toast(result.error || 'Could not fetch URL');
+        }
+      } catch (e) {
+        toast(e.message);
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Fetch';
+    });
 
     // Add block buttons
     document.querySelectorAll('.add-block-btn').forEach(btn => {
@@ -450,34 +578,55 @@ class App {
       });
     });
 
-    // Generate blocks
-    $('#generate-blocks-btn').addEventListener('click', async () => {
-      const title = $('#lesson-title-input').value.trim();
-      const content = $('#lesson-content-input').value.trim();
+    // Chat send
+    const sendChat = async () => {
+      const input = $('#chat-input');
+      const message = input.value.trim();
+      if (!message) return;
 
-      if (!title && !content) {
-        toast('Enter a title or content first');
-        return;
-      }
+      input.value = '';
+      this.chatMessages.push({ role: 'user', text: message });
+      this.renderChatMessages();
 
-      this.currentEntry.title = title || 'Untitled Lesson';
-      this.currentEntry.content = content;
-
-      const btn = $('#generate-blocks-btn');
-      btn.disabled = true;
-      btn.textContent = 'Generating...';
+      // Show typing indicator
+      this.chatMessages.push({ role: 'assistant', text: '...', typing: true });
+      this.renderChatMessages();
 
       try {
-        const result = await this.ai.generateLessonBlocks(title, content);
-        this.blocks = result.blocks || [];
-        this.renderBlocks();
-        toast('Outline generated');
-      } catch (e) {
-        toast(e.message);
-      }
+        const title = $('#lesson-title-input').value.trim();
+        const content = $('#lesson-content-input').value.trim();
+        this.currentEntry.title = title || this.currentEntry.title;
+        this.currentEntry.content = content;
 
-      btn.disabled = false;
-      btn.textContent = 'Generate Outline';
+        const result = await this.ai.chatPlanLesson(message, this.blocks, {
+          title: this.currentEntry.title,
+          content: this.currentEntry.content
+        });
+
+        // Remove typing indicator
+        this.chatMessages = this.chatMessages.filter(m => !m.typing);
+        this.chatMessages.push({ role: 'assistant', text: result.reply });
+
+        if (result.blocksChanged && result.blocks) {
+          this.blocks = result.blocks;
+          this.renderBlocks();
+          this.renderTimeEstimate();
+        }
+
+        this.renderChatMessages();
+      } catch (e) {
+        this.chatMessages = this.chatMessages.filter(m => !m.typing);
+        this.chatMessages.push({ role: 'assistant', text: 'Sorry, I had trouble with that. Try again?' });
+        this.renderChatMessages();
+      }
+    };
+
+    $('#chat-send-btn').addEventListener('click', sendChat);
+    $('#chat-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChat();
+      }
     });
 
     // Start without plan
@@ -537,17 +686,25 @@ class App {
             </div>
           </div>
           <div class="input-group">
-            <label for="talk-content-input">Notes / Draft (optional)</label>
+            <label for="talk-url-input">Conference Talk URL (optional)</label>
+            <div class="url-input-row">
+              <input type="url" id="talk-url-input" placeholder="Paste URL for reference material...">
+              <button class="btn btn-sm" id="fetch-talk-url-btn" ${!this.ai.hasApiKey() ? 'disabled' : ''}>Fetch</button>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="talk-content-input">Notes / Draft</label>
             <textarea id="talk-content-input" placeholder="Add notes or a draft for AI to work with...">${entry.content || ''}</textarea>
           </div>
-          <button class="btn btn-secondary btn-block" id="generate-talk-blocks-btn"
-            ${!this.ai.hasApiKey() ? 'disabled' : ''}>
-            Generate Outline
-          </button>
         </div>
 
         <div class="prep-section">
-          <h3>Talk Outline</h3>
+          <div class="prep-section-header">
+            <h3>Talk Outline</h3>
+            <div class="time-estimate" id="time-estimate">
+              <span class="time-value">--</span> min
+            </div>
+          </div>
           <div class="add-block-row">
             <button class="add-block-btn" data-type="point">+ Point</button>
             <button class="add-block-btn" data-type="scripture">+ Scripture</button>
@@ -555,6 +712,17 @@ class App {
             <button class="add-block-btn" data-type="note">+ Note</button>
           </div>
           <ul class="block-list" id="block-list"></ul>
+        </div>
+
+        <div class="chat-container">
+          <div class="chat-header">
+            <h3>&#128172; Plan with AI</h3>
+          </div>
+          <div class="chat-messages" id="chat-messages"></div>
+          <div class="chat-input-row">
+            <input type="text" id="chat-input" placeholder="Ask AI to help plan your talk..." ${!this.ai.hasApiKey() ? 'disabled' : ''}>
+            <button class="btn btn-primary btn-sm" id="chat-send-btn" ${!this.ai.hasApiKey() ? 'disabled' : ''}>Send</button>
+          </div>
         </div>
 
         <div class="divider">ready?</div>
@@ -571,6 +739,8 @@ class App {
 
     showScreen('screen-talk-prep');
     this.renderBlocks();
+    this.renderTimeEstimate();
+    this.renderChatMessages();
 
     // Duration selector
     document.querySelectorAll('.duration-option').forEach(btn => {
@@ -581,6 +751,39 @@ class App {
       });
     });
 
+    // Fetch URL
+    $('#fetch-talk-url-btn').addEventListener('click', async () => {
+      const url = $('#talk-url-input').value.trim();
+      if (!url) {
+        toast('Enter a URL first');
+        return;
+      }
+
+      const btn = $('#fetch-talk-url-btn');
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      try {
+        const result = await this.ai.fetchUrlContent(url);
+        if (result.success) {
+          if (result.content) {
+            const existing = $('#talk-content-input').value.trim();
+            const newContent = existing ? existing + '\n\n---\n\n' + result.content : result.content;
+            $('#talk-content-input').value = newContent;
+            this.currentEntry.content = newContent;
+          }
+          toast('Content loaded');
+        } else {
+          toast(result.error || 'Could not fetch URL');
+        }
+      } catch (e) {
+        toast(e.message);
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Fetch';
+    });
+
     // Add block buttons
     document.querySelectorAll('.add-block-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -589,36 +792,59 @@ class App {
       });
     });
 
-    // Generate blocks
-    $('#generate-talk-blocks-btn').addEventListener('click', async () => {
-      const topic = $('#talk-topic-input').value.trim();
-      const scriptures = $('#talk-scriptures-input').value.trim();
-      const content = $('#talk-content-input').value.trim();
+    // Chat send
+    const sendChat = async () => {
+      const input = $('#chat-input');
+      const message = input.value.trim();
+      if (!message) return;
 
-      if (!topic && !content) {
-        toast('Enter a topic or content first');
-        return;
-      }
+      input.value = '';
+      this.chatMessages.push({ role: 'user', text: message });
+      this.renderChatMessages();
 
-      this.currentEntry.topic = topic || 'Untitled Talk';
-      this.currentEntry.scriptures = scriptures;
-      this.currentEntry.content = content;
-
-      const btn = $('#generate-talk-blocks-btn');
-      btn.disabled = true;
-      btn.textContent = 'Generating...';
+      // Show typing indicator
+      this.chatMessages.push({ role: 'assistant', text: '...', typing: true });
+      this.renderChatMessages();
 
       try {
-        const result = await this.ai.generateTalkBlocks(topic, scriptures, content, this.talkDuration);
-        this.blocks = result.blocks || [];
-        this.renderBlocks();
-        toast('Outline generated');
-      } catch (e) {
-        toast(e.message);
-      }
+        const topic = $('#talk-topic-input').value.trim();
+        const scriptures = $('#talk-scriptures-input').value.trim();
+        const content = $('#talk-content-input').value.trim();
+        this.currentEntry.topic = topic || this.currentEntry.topic;
+        this.currentEntry.scriptures = scriptures;
+        this.currentEntry.content = content;
 
-      btn.disabled = false;
-      btn.textContent = 'Generate Outline';
+        const result = await this.ai.chatPlanTalk(message, this.blocks, {
+          topic: this.currentEntry.topic,
+          scriptures: this.currentEntry.scriptures,
+          content: this.currentEntry.content,
+          duration: this.talkDuration
+        });
+
+        // Remove typing indicator
+        this.chatMessages = this.chatMessages.filter(m => !m.typing);
+        this.chatMessages.push({ role: 'assistant', text: result.reply });
+
+        if (result.blocksChanged && result.blocks) {
+          this.blocks = result.blocks;
+          this.renderBlocks();
+          this.renderTimeEstimate();
+        }
+
+        this.renderChatMessages();
+      } catch (e) {
+        this.chatMessages = this.chatMessages.filter(m => !m.typing);
+        this.chatMessages.push({ role: 'assistant', text: 'Sorry, I had trouble with that. Try again?' });
+        this.renderChatMessages();
+      }
+    };
+
+    $('#chat-send-btn').addEventListener('click', sendChat);
+    $('#chat-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChat();
+      }
     });
 
     // Start without plan
@@ -642,6 +868,28 @@ class App {
     });
   }
 
+  // --- Chat Messages ---
+
+  renderChatMessages() {
+    const el = $('#chat-messages');
+    if (!el) return;
+
+    if (this.chatMessages.length === 0) {
+      el.innerHTML = '<div class="chat-empty">Chat with AI to collaboratively build your outline.</div>';
+      return;
+    }
+
+    el.innerHTML = '';
+    for (const msg of this.chatMessages) {
+      const div = document.createElement('div');
+      div.className = `chat-message ${msg.role}${msg.typing ? ' typing' : ''}`;
+      div.textContent = msg.text;
+      el.appendChild(div);
+    }
+
+    el.scrollTop = el.scrollHeight;
+  }
+
   // --- Block Management ---
 
   addBlock(type) {
@@ -661,6 +909,7 @@ class App {
         detail: ''
       });
       this.renderBlocks();
+      this.renderTimeEstimate();
     }
   }
 
@@ -671,7 +920,7 @@ class App {
     list.innerHTML = '';
 
     if (this.blocks.length === 0) {
-      list.innerHTML = '<p class="text-muted text-center" style="padding:20px">No blocks yet. Add manually or generate with AI.</p>';
+      list.innerHTML = '<p class="text-muted text-center" style="padding:20px">No blocks yet. Add manually or chat with AI.</p>';
       return;
     }
 
@@ -701,6 +950,7 @@ class App {
         e.stopPropagation();
         this.blocks.splice(i, 1);
         this.renderBlocks();
+        this.renderTimeEstimate();
       });
 
       list.appendChild(item);
