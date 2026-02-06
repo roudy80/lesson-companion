@@ -479,6 +479,31 @@ If silent, return empty strings. Return ONLY valid JSON.`
   }
 
   /**
+   * Lookup scripture text.
+   */
+  async lookupScripture(reference) {
+    const prompt = `Look up this scripture reference and provide the verse text.
+
+Reference: "${reference}"
+
+Format as JSON:
+{
+  "reference": "Canonical reference (e.g., Alma 32:21)",
+  "text": "The verse text",
+  "context": "Brief context (1 sentence)"
+}
+
+Return ONLY valid JSON.`;
+
+    const text = await this.call(prompt, { maxTokens: 300 });
+    try {
+      return this._parseJSON(text);
+    } catch {
+      return { reference, text: 'Could not find scripture', context: '' };
+    }
+  }
+
+  /**
    * Validate API key.
    */
   async validateKey(key) {
