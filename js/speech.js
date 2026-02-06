@@ -15,13 +15,13 @@ export class Speech {
     this.onError = null;         // callback(error)
     this._silenceTimer = null;
     this._chunkInterval = null;
-    this._chunkIntervalMs = 30000;
-    this._silenceTimeoutMs = 10000;
+    this._chunkIntervalMs = 15000; // 15 seconds for faster feedback
+    this._silenceTimeoutMs = 8000;
 
     // Web Speech API state
     this._recognition = null;
     this._restartAttempts = 0;
-    this._maxRestarts = 5;
+    this._maxRestarts = 10;
     this._intentionallyStopped = false;
 
     // MediaRecorder fallback state
@@ -82,6 +82,27 @@ export class Speech {
 
   getTranscript() {
     return this.transcript.trim();
+  }
+
+  /**
+   * Get the current pending chunk for immediate processing.
+   */
+  getPendingChunk() {
+    return this.pendingChunk.trim();
+  }
+
+  /**
+   * Force flush the current chunk immediately (for "I need help" button).
+   */
+  forceFlush() {
+    if (this._mode === 'webspeech') {
+      this._flushTextChunk();
+    } else if (this._mode === 'recorder') {
+      // Stop and restart to flush audio
+      if (this._mediaRecorder?.state === 'recording') {
+        this._mediaRecorder.stop();
+      }
+    }
   }
 
   /**

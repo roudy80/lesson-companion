@@ -127,37 +127,87 @@ Return ONLY valid JSON, no markdown fences or extra text.`;
   }
 
   /**
-   * Generate a live suggestion for lesson mode (same as before).
+   * Generate a live suggestion for lesson mode.
+   * Now includes scripture spotlight and doctrine pivot capabilities.
    */
-  async generateLiveSuggestion(transcript, currentEntry, currentPoint) {
-    const prompt = `You are a real-time teaching assistant for an Elders Quorum lesson.
+  async generateLiveSuggestion(transcript, currentEntry, currentPoint, hasNoPlan = false) {
+    const contextInfo = hasNoPlan
+      ? 'This is a free-form gospel discussion with no specific lesson plan.'
+      : `Lesson: "${currentEntry?.title || 'Gospel Discussion'}"\nCurrent Discussion Point: ${currentPoint || 'Open discussion'}`;
 
-Lesson: "${currentEntry.title}"
-${currentEntry.content ? `Lesson content: "${currentEntry.content.substring(0, 500)}"` : ''}
-Current Discussion Point: ${currentPoint}
+    const prompt = `You are a real-time teaching assistant for an LDS Elders Quorum lesson. You have deep knowledge of LDS scriptures, General Conference talks, handbooks, and gospel doctrine.
 
-Recent discussion transcript:
+${contextInfo}
+
+Recent discussion transcript (last 15 seconds):
 "${transcript}"
 
-Based on the current discussion, suggest ONE brief, helpful thing. Choose the most appropriate:
-- A follow-up question to deepen the discussion
-- A relevant scripture reference that connects to what's being discussed
-- A gentle redirect if the discussion has wandered far from the lesson
+Analyze the discussion and provide ONE of these responses (choose the most helpful):
+
+1. **scripture** - If someone mentions a story, principle, or scripture but can't remember the reference, identify it
+2. **doctrine** - If a hard doctrinal question was asked, provide a brief answer from official sources + a pivot back to the lesson
+3. **question** - A follow-up question to deepen the discussion
+4. **redirect** - If discussion has wandered, a gentle way to refocus
 
 Format as JSON:
 {
-  "type": "question" | "scripture" | "redirect",
-  "suggestion": "...",
-  "detail": "Optional 1-sentence explanation"
+  "type": "scripture" | "doctrine" | "question" | "redirect",
+  "suggestion": "Main point (1 line max)",
+  "bullets": ["bullet 1", "bullet 2"],
+  "reference": "Scripture or handbook reference if applicable"
 }
 
-Return ONLY valid JSON. Keep the suggestion to 1-2 sentences max.`;
+RULES:
+- Max 2-3 short bullets
+- No paragraphs, keep it scannable
+- For scripture type: identify the exact reference
+- For doctrine type: cite handbook/scripture, then pivot suggestion
+- Return ONLY valid JSON`;
 
-    const text = await this.call(prompt, { maxTokens: 256, temperature: 0.6 });
+    const text = await this.call(prompt, { maxTokens: 300, temperature: 0.6 });
     try {
       return this._parseJSON(text);
     } catch {
-      return { type: 'question', suggestion: 'Consider asking the class what stood out to them from this passage.', detail: '' };
+      return { type: 'question', suggestion: 'What has stood out to you from this discussion?', bullets: [], reference: '' };
+    }
+  }
+
+  /**
+   * Generate immediate help when user taps "I need help" button.
+   */
+  async generateImmediateHelp(transcript, currentEntry, currentPoint, hasNoPlan = false) {
+    const contextInfo = hasNoPlan
+      ? 'Free-form gospel discussion, no lesson plan.'
+      : `Lesson: "${currentEntry?.title || 'Gospel Discussion'}"\nCurrent point: ${currentPoint || 'Open discussion'}`;
+
+    const prompt = `You are helping a Sunday School teacher who just pressed "I need help" during their lesson.
+
+${contextInfo}
+
+What they've been discussing:
+"${transcript}"
+
+The teacher needs immediate, actionable help. Provide ONE of:
+1. A question to restart stalled discussion
+2. A relevant scripture to share
+3. A story or example to illustrate the point
+4. A way to transition to the next topic
+
+Format as JSON:
+{
+  "type": "help",
+  "suggestion": "What to do right now (1 line)",
+  "bullets": ["specific action or talking point", "optional second point"],
+  "reference": "Scripture reference if applicable"
+}
+
+Keep it brief and immediately actionable. Return ONLY valid JSON.`;
+
+    const text = await this.call(prompt, { maxTokens: 250, temperature: 0.7 });
+    try {
+      return this._parseJSON(text);
+    } catch {
+      return { type: 'help', suggestion: 'Ask: "What questions do you have about what we\'ve discussed?"', bullets: [], reference: '' };
     }
   }
 
@@ -182,17 +232,17 @@ Give ONE brief delivery suggestion. Choose the most helpful:
 Format as JSON:
 {
   "type": "pacing" | "transition" | "emphasis" | "encouragement",
-  "suggestion": "...",
-  "detail": "Optional brief explanation"
+  "suggestion": "Main advice (1 line)",
+  "bullets": ["specific tip"]
 }
 
-Return ONLY valid JSON. Keep it to 1-2 sentences.`;
+Max 2 bullets. Keep it scannable. Return ONLY valid JSON.`;
 
-    const text = await this.call(prompt, { maxTokens: 256, temperature: 0.6 });
+    const text = await this.call(prompt, { maxTokens: 200, temperature: 0.6 });
     try {
       return this._parseJSON(text);
     } catch {
-      return { type: 'encouragement', suggestion: 'You\'re doing great. Remember to make eye contact and speak slowly.', detail: '' };
+      return { type: 'encouragement', suggestion: 'You\'re doing great. Make eye contact and breathe.', bullets: [] };
     }
   }
 
@@ -202,7 +252,7 @@ Return ONLY valid JSON. Keep it to 1-2 sentences.`;
   async generateLessonSummary(title, transcript, coveredPoints, totalPoints, durationMinutes) {
     const prompt = `You are a teaching assistant summarizing an Elders Quorum lesson.
 
-Lesson: "${title}"
+Lesson: "${title || 'Gospel Discussion'}"
 Duration: ${durationMinutes} minutes
 Points covered: ${coveredPoints} of ${totalPoints}
 
@@ -271,21 +321,27 @@ Return ONLY valid JSON.`;
    * Transcribe audio and generate a live suggestion in one call.
    * mode: 'lesson' | 'talk'
    */
-  async transcribeAndSuggest(base64Audio, mimeType, currentEntry, currentPoint, mode = 'lesson') {
+  async transcribeAndSuggest(base64Audio, mimeType, currentEntry, currentPoint, mode = 'lesson', hasNoPlan = false) {
     const key = this.getApiKey();
     if (!key) throw new Error('No API key configured');
 
     const contextInfo = mode === 'lesson'
-      ? `Lesson: "${currentEntry.title}"\nCurrent Discussion Point: ${currentPoint}`
-      : `Talk topic: "${currentEntry.topic}"\nCurrent section: ${currentPoint}`;
+      ? (hasNoPlan
+          ? 'Free-form gospel discussion, no lesson plan.'
+          : `Lesson: "${currentEntry?.title || 'Gospel Discussion'}"\nCurrent Discussion Point: ${currentPoint}`)
+      : `Talk topic: "${currentEntry?.topic || 'Gospel Talk'}"\nCurrent section: ${currentPoint}`;
+
+    const suggestionTypes = mode === 'lesson'
+      ? '"scripture" | "doctrine" | "question" | "redirect"'
+      : '"pacing" | "transition" | "emphasis" | "encouragement"';
 
     const suggestionInstruction = mode === 'lesson'
-      ? 'A follow-up question, a relevant scripture, or a gentle redirect if off-topic.'
+      ? `Choose ONE:
+- scripture: If someone mentions a story/scripture but can't place it, identify the reference
+- doctrine: For hard doctrinal questions, brief answer + pivot back to lesson
+- question: Follow-up question to deepen discussion
+- redirect: Gentle refocus if off-topic`
       : 'A pacing tip, transition suggestion, emphasis advice, or encouragement.';
-
-    const typeOptions = mode === 'lesson'
-      ? '"question" | "scripture" | "redirect"'
-      : '"pacing" | "transition" | "emphasis" | "encouragement"';
 
     const url = `${this.baseUrl}/${this.model}:generateContent?key=${key}`;
     const body = {
@@ -298,29 +354,30 @@ Return ONLY valid JSON.`;
             }
           },
           {
-            text: `You are a real-time assistant.
+            text: `You are a real-time assistant with deep LDS gospel knowledge.
 
 ${contextInfo}
 
-First, transcribe the audio. Then, based on the discussion, suggest ONE helpful thing:
-- ${suggestionInstruction}
+First, transcribe the audio. Then provide a suggestion.
+${suggestionInstruction}
 
 Format as JSON:
 {
   "transcript": "what was said in the audio",
-  "type": ${typeOptions},
-  "suggestion": "your suggestion",
-  "detail": "optional 1-sentence explanation"
+  "type": ${suggestionTypes},
+  "suggestion": "Main point (1 line max)",
+  "bullets": ["bullet 1", "bullet 2"],
+  "reference": "Scripture/handbook reference if applicable"
 }
 
-If the audio is silent or unintelligible, set transcript to "" and suggestion to "".
+Max 2-3 short bullets. If audio is silent/unintelligible, set transcript and suggestion to "".
 Return ONLY valid JSON.`
           }
         ]
       }],
       generationConfig: {
         temperature: 0.6,
-        maxOutputTokens: 512
+        maxOutputTokens: 400
       }
     };
 
@@ -340,7 +397,7 @@ Return ONLY valid JSON.`
     try {
       return this._parseJSON(text);
     } catch {
-      return { transcript: '', type: 'question', suggestion: '', detail: '' };
+      return { transcript: '', type: 'question', suggestion: '', bullets: [], reference: '' };
     }
   }
 

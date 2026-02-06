@@ -1,6 +1,6 @@
 import { AI } from './ai.js';
 import { Speech } from './speech.js';
-import { $, showScreen, toast, formatTime, renderSessionItem, renderQuestionItem } from './ui.js';
+import { $, showScreen, toast, formatTime, renderSessionItem } from './ui.js';
 
 class App {
   constructor() {
@@ -15,8 +15,9 @@ class App {
     this.currentSectionIndex = 0;
     this.timerSeconds = 0;
     this.timerInterval = null;
-    this.suggestionHideTimer = null;
     this.isLive = false;
+    this.hasNoPlan = false;
+    this.helpRequested = false;
   }
 
   init() {
@@ -36,7 +37,6 @@ class App {
   }
 
   saveHistory(key, list) {
-    // Cap at 20 entries, trim oldest
     const trimmed = list.slice(0, 20);
     localStorage.setItem(key, JSON.stringify(trimmed));
   }
@@ -103,7 +103,6 @@ class App {
     const tabBar = $('#tab-bar');
     if (!tabBar) return;
 
-    // Hide tab bar during live/prep/summary screens
     const hideOn = ['lesson-prep', 'lesson-live', 'lesson-summary', 'talk-prep', 'talk-live', 'talk-summary', 'settings'];
     if (hideOn.includes(route)) {
       tabBar.classList.add('hidden');
@@ -111,7 +110,6 @@ class App {
       tabBar.classList.remove('hidden');
     }
 
-    // Highlight active tab
     tabBar.querySelectorAll('.tab-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tab === route);
     });
@@ -120,7 +118,6 @@ class App {
   navigate(hash) {
     const route = hash.replace('#', '') || 'lessons';
 
-    // If leaving live, clean up
     if (this.isLive && route !== 'lesson-live' && route !== 'talk-live') {
       this.stopLive();
     }
@@ -244,7 +241,10 @@ class App {
     }
 
     html += `
-      <button class="new-session-btn" id="new-lesson-btn">+ New Lesson</button>
+      <button class="quick-start-btn" id="quick-start-lesson-btn">
+        <span>&#9889;</span> Start Lesson Now
+      </button>
+      <button class="new-session-btn" id="new-lesson-btn">+ Plan New Lesson</button>
     `;
 
     if (lessons.length > 0) {
@@ -253,7 +253,7 @@ class App {
       html += `
         <div class="empty-state">
           <div class="icon">&#128218;</div>
-          <p>No lessons yet. Tap "New Lesson" to get started.</p>
+          <p>No lessons yet. Start teaching or plan a lesson.</p>
         </div>
       `;
     }
@@ -263,7 +263,26 @@ class App {
     $('#screen-lessons').innerHTML = html;
     showScreen('screen-lessons');
 
-    // New lesson button
+    // Quick start
+    $('#quick-start-lesson-btn').addEventListener('click', () => {
+      this.currentEntry = {
+        id: Date.now().toString(),
+        title: 'Quick Lesson',
+        content: '',
+        outline: null,
+        plan: [],
+        transcript: '',
+        duration: 0,
+        summary: null,
+        notes: '',
+        createdAt: new Date().toISOString()
+      };
+      this.lessonPlan = [];
+      this.hasNoPlan = true;
+      location.hash = '#lesson-live';
+    });
+
+    // Plan new lesson
     $('#new-lesson-btn').addEventListener('click', () => {
       this.currentEntry = {
         id: Date.now().toString(),
@@ -277,6 +296,7 @@ class App {
         notes: '',
         createdAt: new Date().toISOString()
       };
+      this.hasNoPlan = false;
       location.hash = '#lesson-prep';
     });
 
@@ -286,6 +306,7 @@ class App {
       for (const lesson of lessons) {
         list.appendChild(renderSessionItem(lesson, 'lesson', (l) => {
           this.currentEntry = { ...l };
+          this.hasNoPlan = false;
           location.hash = '#lesson-prep';
         }));
       }
@@ -317,7 +338,10 @@ class App {
     }
 
     html += `
-      <button class="new-session-btn" id="new-talk-btn">+ New Talk</button>
+      <button class="quick-start-btn" id="quick-start-talk-btn">
+        <span>&#9889;</span> Start Talk Now
+      </button>
+      <button class="new-session-btn" id="new-talk-btn">+ Plan New Talk</button>
     `;
 
     if (talks.length > 0) {
@@ -326,7 +350,7 @@ class App {
       html += `
         <div class="empty-state">
           <div class="icon">&#127908;</div>
-          <p>No talks yet. Tap "New Talk" to get started.</p>
+          <p>No talks yet. Start speaking or plan a talk.</p>
         </div>
       `;
     }
@@ -336,7 +360,26 @@ class App {
     $('#screen-talks').innerHTML = html;
     showScreen('screen-talks');
 
-    // New talk button
+    // Quick start
+    $('#quick-start-talk-btn').addEventListener('click', () => {
+      this.currentEntry = {
+        id: Date.now().toString(),
+        topic: 'Quick Talk',
+        scriptures: '',
+        content: '',
+        outline: null,
+        transcript: '',
+        duration: 0,
+        summary: null,
+        notes: '',
+        createdAt: new Date().toISOString()
+      };
+      this.talkSections = [];
+      this.hasNoPlan = true;
+      location.hash = '#talk-live';
+    });
+
+    // Plan new talk
     $('#new-talk-btn').addEventListener('click', () => {
       this.currentEntry = {
         id: Date.now().toString(),
@@ -350,6 +393,7 @@ class App {
         notes: '',
         createdAt: new Date().toISOString()
       };
+      this.hasNoPlan = false;
       location.hash = '#talk-prep';
     });
 
@@ -359,6 +403,7 @@ class App {
       for (const talk of talks) {
         list.appendChild(renderSessionItem(talk, 'talk', (t) => {
           this.currentEntry = { ...t };
+          this.hasNoPlan = false;
           location.hash = '#talk-prep';
         }));
       }
@@ -378,19 +423,19 @@ class App {
     $('#screen-lesson-prep').innerHTML = `
       <div class="header">
         <button class="header-btn back-btn" onclick="location.hash='#lessons'"></button>
-        <h1>Prepare Lesson</h1>
+        <h1>Plan Lesson</h1>
         <div style="width:40px"></div>
       </div>
       <div style="padding:16px;flex:1;overflow-y:auto" class="no-tab-padding">
         <div class="entry-form">
           <div class="input-group">
-            <label for="lesson-title-input">Talk / Conference Session Title</label>
+            <label for="lesson-title-input">Lesson Title</label>
             <input type="text" id="lesson-title-input" placeholder="e.g. 'Faith in Uncertain Times'"
               value="${entry.title || ''}">
           </div>
           <div class="input-group">
-            <label for="lesson-content-input">Content / Notes / Key Points</label>
-            <textarea id="lesson-content-input" placeholder="Paste the talk content, your notes, or key scriptures and themes you want to discuss...">${entry.content || ''}</textarea>
+            <label for="lesson-content-input">Content / Notes</label>
+            <textarea id="lesson-content-input" placeholder="Paste the talk content, scriptures, themes, or any notes...">${entry.content || ''}</textarea>
           </div>
           <button class="btn btn-secondary btn-block" id="generate-lesson-outline-btn"
             ${!this.ai.hasApiKey() ? 'disabled' : ''}>
@@ -400,7 +445,7 @@ class App {
         </div>
 
         <div class="prep-section" id="ai-outline-section" style="display:none">
-          <h3>AI Discussion Outline</h3>
+          <h3>AI Outline</h3>
           <div id="ai-outline-content"></div>
         </div>
 
@@ -410,8 +455,14 @@ class App {
           <button class="add-question-btn mt-1" id="add-question-btn">+ Add Question</button>
         </div>
 
-        <button class="btn btn-primary btn-block btn-lg mt-3" id="start-lesson-btn" style="display:none">
-          Start Lesson
+        <div class="divider">or</div>
+
+        <button class="btn btn-success btn-block btn-lg" id="start-without-plan-btn">
+          Start Without Plan
+        </button>
+
+        <button class="btn btn-primary btn-block btn-lg mt-2" id="start-lesson-btn" style="display:none">
+          Start With Plan
         </button>
       </div>
     `;
@@ -437,13 +488,12 @@ class App {
       const title = $('#lesson-title-input').value.trim();
       const content = $('#lesson-content-input').value.trim();
 
-      if (!title) {
-        toast('Please enter a title');
+      if (!title && !content) {
+        toast('Please enter a title or content');
         return;
       }
 
-      // Save to entry
-      this.currentEntry.title = title;
+      this.currentEntry.title = title || 'Untitled Lesson';
       this.currentEntry.content = content;
 
       const btn = $('#generate-lesson-outline-btn');
@@ -451,7 +501,7 @@ class App {
       btn.textContent = 'Generating...';
 
       $('#ai-outline-section').style.display = '';
-      $('#ai-outline-content').innerHTML = '<div class="ai-loading"><div class="spinner"></div> Generating outline...</div>';
+      $('#ai-outline-content').innerHTML = '<div class="ai-loading"><div class="spinner"></div> Generating...</div>';
 
       try {
         const outline = await this.ai.generateLessonOutline(title, content);
@@ -459,7 +509,6 @@ class App {
         this.currentEntry.outline = outline;
         this.renderAIOutline(outline);
 
-        // Auto-populate questions
         if (outline.questions?.length) {
           this.renderPrepQuestions(outline.questions);
           $('#questions-section').style.display = '';
@@ -482,17 +531,27 @@ class App {
         const qList = this.getVisibleQuestions();
         qList.push({ question: text.trim(), cross_reference: '' });
         this.renderPrepQuestions(qList);
+        $('#start-lesson-btn').style.display = '';
       }
     });
 
-    // Start lesson
+    // Start without plan
+    $('#start-without-plan-btn').addEventListener('click', () => {
+      this.currentEntry.title = $('#lesson-title-input').value.trim() || 'Quick Lesson';
+      this.currentEntry.content = $('#lesson-content-input').value.trim();
+      this.lessonPlan = [];
+      this.hasNoPlan = true;
+      location.hash = '#lesson-live';
+    });
+
+    // Start with plan
     $('#start-lesson-btn').addEventListener('click', () => {
-      // Save title/content from inputs
       this.currentEntry.title = $('#lesson-title-input').value.trim() || this.currentEntry.title;
       this.currentEntry.content = $('#lesson-content-input').value.trim() || this.currentEntry.content;
       this.lessonPlan = this.getVisibleQuestions();
       this.currentEntry.plan = this.lessonPlan;
       this.currentPointIndex = 0;
+      this.hasNoPlan = false;
       location.hash = '#lesson-live';
     });
   }
@@ -507,40 +566,15 @@ class App {
       html += `<div class="card mb-2"><p>${outline.opening}</p></div>`;
     }
 
-    if (outline.questions?.length) {
-      html += '<div class="label mt-2">AI-Generated Questions</div>';
-      html += '<ul class="question-list">';
-      outline.questions.forEach(q => {
-        html += `
-          <li class="question-item">
-            <div class="question-text">${q.question}</div>
-            ${q.cross_reference ? `<div class="cross-ref">${q.cross_reference}</div>` : ''}
-          </li>
-        `;
-      });
-      html += '</ul>';
-      html += `<button class="btn btn-secondary btn-block mt-1" id="use-ai-questions-btn">
-        Use These Questions
-      </button>`;
-    }
-
     if (outline.themes?.length) {
-      html += '<div class="label mt-2">Key Themes</div>';
-      html += '<div class="card">';
+      html += '<div class="card mb-2"><div class="label">Key Themes</div>';
       outline.themes.forEach(t => {
         html += `<p style="margin-bottom:4px;color:var(--text-primary)">&bull; ${t}</p>`;
       });
       html += '</div>';
     }
 
-    el.innerHTML = html;
-
-    $('#use-ai-questions-btn')?.addEventListener('click', () => {
-      this.renderPrepQuestions(outline.questions);
-      $('#questions-section').style.display = '';
-      $('#start-lesson-btn').style.display = '';
-      toast('Questions updated');
-    });
+    el.innerHTML = html || '<p class="text-muted">Outline generated. Questions below.</p>';
   }
 
   renderPrepQuestions(questions) {
@@ -548,7 +582,37 @@ class App {
     if (!list) return;
     list.innerHTML = '';
     questions.forEach((q, i) => {
-      list.appendChild(renderQuestionItem(q, i));
+      const item = document.createElement('li');
+      item.className = 'question-item editable';
+      item.innerHTML = `
+        <div class="question-text">${q.question}</div>
+        ${q.cross_reference ? `<div class="cross-ref">${q.cross_reference}</div>` : ''}
+        <div class="question-actions">
+          <button class="edit" title="Edit">&#9998;</button>
+          <button class="delete" title="Delete">&times;</button>
+        </div>
+      `;
+
+      // Edit
+      item.querySelector('.edit').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newText = prompt('Edit question:', q.question);
+        if (newText?.trim()) {
+          q.question = newText.trim();
+          item.querySelector('.question-text').textContent = q.question;
+        }
+      });
+
+      // Delete
+      item.querySelector('.delete').addEventListener('click', (e) => {
+        e.stopPropagation();
+        item.remove();
+        if (list.children.length === 0) {
+          $('#start-lesson-btn').style.display = 'none';
+        }
+      });
+
+      list.appendChild(item);
     });
   }
 
@@ -573,7 +637,7 @@ class App {
     $('#screen-talk-prep').innerHTML = `
       <div class="header">
         <button class="header-btn back-btn" onclick="location.hash='#talks'"></button>
-        <h1>Prepare Talk</h1>
+        <h1>Plan Talk</h1>
         <div style="width:40px"></div>
       </div>
       <div style="padding:16px;flex:1;overflow-y:auto" class="no-tab-padding">
@@ -584,27 +648,33 @@ class App {
               value="${entry.topic || ''}">
           </div>
           <div class="input-group">
-            <label for="talk-scriptures-input">Scriptures to Include</label>
+            <label for="talk-scriptures-input">Scriptures</label>
             <input type="text" id="talk-scriptures-input" placeholder="e.g. 'Alma 37:37, D&C 19:38'"
               value="${entry.scriptures || ''}">
           </div>
           <div class="input-group">
-            <label for="talk-content-input">Talk Content / Draft</label>
-            <textarea id="talk-content-input" rows="10" placeholder="Write your talk here, or enter rough notes and let AI help you outline it...">${entry.content || ''}</textarea>
+            <label for="talk-content-input">Talk Content</label>
+            <textarea id="talk-content-input" rows="10" placeholder="Write your talk or notes...">${entry.content || ''}</textarea>
           </div>
           <button class="btn btn-secondary btn-block" id="generate-talk-outline-btn"
             ${!this.ai.hasApiKey() ? 'disabled' : ''}>
             AI Outline Help
           </button>
-          ${!this.ai.hasApiKey() ? '<p class="hint mt-1">Add API key in Settings to enable AI.</p>' : ''}
+          ${!this.ai.hasApiKey() ? '<p class="hint mt-1">Add API key in Settings.</p>' : ''}
         </div>
 
         <div class="prep-section" id="talk-outline-section" style="display:none">
-          <h3>AI Talk Outline</h3>
+          <h3>AI Outline</h3>
           <div id="talk-outline-content"></div>
         </div>
 
-        <button class="btn btn-primary btn-block btn-lg mt-3" id="start-talk-btn">
+        <div class="divider">or</div>
+
+        <button class="btn btn-success btn-block btn-lg" id="start-talk-without-plan-btn">
+          Start Without Plan
+        </button>
+
+        <button class="btn btn-primary btn-block btn-lg mt-2" id="start-talk-btn">
           Start Delivery
         </button>
       </div>
@@ -612,7 +682,6 @@ class App {
 
     showScreen('screen-talk-prep');
 
-    // If entry already has an outline, render it
     if (entry.outline) {
       this.renderTalkOutline(entry.outline);
       $('#talk-outline-section').style.display = '';
@@ -624,12 +693,12 @@ class App {
       const scriptures = $('#talk-scriptures-input').value.trim();
       const content = $('#talk-content-input').value.trim();
 
-      if (!topic) {
-        toast('Please enter a topic');
+      if (!topic && !content) {
+        toast('Please enter a topic or content');
         return;
       }
 
-      this.currentEntry.topic = topic;
+      this.currentEntry.topic = topic || 'Untitled Talk';
       this.currentEntry.scriptures = scriptures;
       this.currentEntry.content = content;
 
@@ -638,7 +707,7 @@ class App {
       btn.textContent = 'Generating...';
 
       $('#talk-outline-section').style.display = '';
-      $('#talk-outline-content').innerHTML = '<div class="ai-loading"><div class="spinner"></div> Generating outline...</div>';
+      $('#talk-outline-content').innerHTML = '<div class="ai-loading"><div class="spinner"></div> Generating...</div>';
 
       try {
         const outline = await this.ai.generateTalkOutline(topic, scriptures, content);
@@ -654,19 +723,24 @@ class App {
       btn.textContent = 'AI Outline Help';
     });
 
-    // Start delivery
+    // Start without plan
+    $('#start-talk-without-plan-btn').addEventListener('click', () => {
+      this.currentEntry.topic = $('#talk-topic-input').value.trim() || 'Quick Talk';
+      this.currentEntry.scriptures = $('#talk-scriptures-input').value.trim();
+      this.currentEntry.content = $('#talk-content-input').value.trim();
+      this.talkSections = [];
+      this.hasNoPlan = true;
+      location.hash = '#talk-live';
+    });
+
+    // Start with plan
     $('#start-talk-btn').addEventListener('click', () => {
-      this.currentEntry.topic = $('#talk-topic-input').value.trim() || this.currentEntry.topic;
-      this.currentEntry.scriptures = $('#talk-scriptures-input').value.trim() || this.currentEntry.scriptures;
-      this.currentEntry.content = $('#talk-content-input').value.trim() || this.currentEntry.content;
+      this.currentEntry.topic = $('#talk-topic-input').value.trim() || this.currentEntry.topic || 'Talk';
+      this.currentEntry.scriptures = $('#talk-scriptures-input').value.trim();
+      this.currentEntry.content = $('#talk-content-input').value.trim();
 
-      if (!this.currentEntry.topic && !this.currentEntry.content) {
-        toast('Please enter a topic or content');
-        return;
-      }
-
-      // Build sections for teleprompter
       this.buildTalkSections();
+      this.hasNoPlan = this.talkSections.length === 0;
       location.hash = '#talk-live';
     });
   }
@@ -678,29 +752,24 @@ class App {
     let html = '';
 
     if (outline.sections?.length) {
-      outline.sections.forEach((s, i) => {
+      outline.sections.forEach((s) => {
         html += `
           <div class="card mb-2">
             <div class="label">${s.heading} (~${s.estimatedMinutes} min)</div>
-            <p style="white-space:pre-wrap">${s.content}</p>
+            <p style="white-space:pre-wrap;font-size:0.9375rem">${s.content}</p>
           </div>
         `;
       });
 
-      html += `<div class="card mb-2">
-        <div class="label">Total estimated time</div>
-        <p style="font-weight:600;color:var(--gold)">${outline.totalMinutes} minutes</p>
-      </div>`;
-
       html += `<button class="btn btn-secondary btn-block mt-1" id="use-talk-outline-btn">
-        Use This Outline as Talk Content
+        Use This as Talk Content
       </button>`;
     }
 
     if (outline.tips?.length) {
-      html += '<div class="label mt-2">Tips</div><div class="card">';
+      html += '<div class="card mt-2"><div class="label">Tips</div>';
       outline.tips.forEach(t => {
-        html += `<p style="margin-bottom:4px;color:var(--text-primary)">&bull; ${t}</p>`;
+        html += `<p style="margin-bottom:4px;font-size:0.875rem">&bull; ${t}</p>`;
       });
       html += '</div>';
     }
@@ -708,7 +777,6 @@ class App {
     el.innerHTML = html;
 
     $('#use-talk-outline-btn')?.addEventListener('click', () => {
-      // Merge outline sections into content textarea
       const contentText = outline.sections.map(s => `${s.heading}\n\n${s.content}`).join('\n\n---\n\n');
       $('#talk-content-input').value = contentText;
       this.currentEntry.content = contentText;
@@ -718,7 +786,10 @@ class App {
 
   buildTalkSections() {
     const content = this.currentEntry.content || this.currentEntry.topic;
-    // Split by double newline or --- separator
+    if (!content) {
+      this.talkSections = [];
+      return;
+    }
     const raw = content.split(/\n{2,}|---/).map(s => s.trim()).filter(s => s.length > 0);
     this.talkSections = raw.length > 0 ? raw : [content];
     this.currentSectionIndex = 0;
@@ -727,8 +798,8 @@ class App {
   // --- Lesson Live ---
 
   renderLessonLive() {
-    if (!this.currentEntry || this.lessonPlan.length === 0) {
-      location.hash = '#lesson-prep';
+    if (!this.currentEntry) {
+      location.hash = '#lessons';
       return;
     }
 
@@ -736,7 +807,31 @@ class App {
     this.timerSeconds = 0;
     this.currentPointIndex = 0;
 
-    const point = this.lessonPlan[this.currentPointIndex];
+    const hasPlan = this.lessonPlan.length > 0;
+
+    let planHtml = '';
+    if (hasPlan) {
+      planHtml = `<div class="live-plan-scroll" id="live-plan-scroll">`;
+      this.lessonPlan.forEach((q, i) => {
+        const state = i === 0 ? 'active' : '';
+        planHtml += `
+          <div class="live-plan-item ${state}" data-index="${i}">
+            <div class="plan-index">${i + 1} of ${this.lessonPlan.length}</div>
+            <div class="plan-question">${q.question}</div>
+            ${q.cross_reference ? `<div class="plan-ref">${q.cross_reference}</div>` : ''}
+          </div>
+        `;
+      });
+      planHtml += '</div>';
+    } else {
+      planHtml = `
+        <div class="no-plan-message">
+          <h3>Free-form Discussion</h3>
+          <p>AI is listening and will provide suggestions based on your discussion.</p>
+        </div>
+        <div class="live-plan-scroll" id="live-plan-scroll" style="flex:1"></div>
+      `;
+    }
 
     $('#screen-lesson-live').innerHTML = `
       <div class="live-screen">
@@ -749,56 +844,68 @@ class App {
           <button class="stop-btn" id="stop-lesson-btn">End</button>
         </div>
 
-        <div class="live-main" id="live-main-area">
-          <div class="point-progress" id="point-progress">
-            ${this.currentPointIndex + 1} of ${this.lessonPlan.length}
-          </div>
-          <div class="current-point" id="current-point">${point.question}</div>
-          ${point.cross_reference ? `<p class="text-muted" style="font-size:0.875rem">${point.cross_reference}</p>` : ''}
-          <div class="tap-hint mt-2" id="tap-hint">Tap anywhere to advance</div>
-
+        <div class="live-content">
+          ${planHtml}
           <div class="transcript-preview" id="transcript-box">
-            <div class="transcript-label">Live Transcript${this.speech.mode === 'recorder' ? ' (via Gemini)' : ''}</div>
-            <div id="transcript-text">${this.speech.mode === 'recorder' ? 'Recording audio...' : 'Listening...'}</div>
+            <div class="transcript-label">Listening...</div>
+            <div id="transcript-text"></div>
           </div>
         </div>
 
+        <button class="help-btn" id="help-btn" title="I need help">?</button>
+
         <div class="suggestion-bar" id="suggestion-bar">
-          <button class="suggestion-dismiss" id="dismiss-suggestion">&times;</button>
-          <div class="suggestion-label" id="suggestion-type">AI Suggestion</div>
+          <div class="suggestion-header">
+            <div class="suggestion-label" id="suggestion-label">
+              <span class="suggestion-type-icon" id="suggestion-icon">&#128161;</span>
+              <span id="suggestion-type">AI Suggestion</span>
+            </div>
+            <button class="suggestion-dismiss" id="dismiss-suggestion">&times;</button>
+          </div>
           <div class="suggestion-text" id="suggestion-text"></div>
+          <ul class="suggestion-bullets" id="suggestion-bullets"></ul>
+          <div class="suggestion-reference" id="suggestion-reference"></div>
         </div>
       </div>
     `;
 
     showScreen('screen-lesson-live');
+
+    // Plan item click to jump
+    if (hasPlan) {
+      $('#live-plan-scroll').addEventListener('click', (e) => {
+        const item = e.target.closest('.live-plan-item');
+        if (!item) return;
+        const idx = parseInt(item.dataset.index);
+        this.jumpToPoint(idx);
+      });
+    }
+
     this.startLiveCommon('lesson');
   }
 
-  advancePoint() {
-    if (this.currentPointIndex < this.lessonPlan.length - 1) {
-      this.currentPointIndex++;
-      const point = this.lessonPlan[this.currentPointIndex];
-      const el = $('#current-point');
-      const progress = $('#point-progress');
-      if (el) el.textContent = point.question;
-      if (progress) progress.textContent = `${this.currentPointIndex + 1} of ${this.lessonPlan.length}`;
+  jumpToPoint(idx) {
+    if (idx < 0 || idx >= this.lessonPlan.length) return;
 
-      const crossRef = el?.nextElementSibling;
-      if (crossRef && crossRef.classList.contains('text-muted')) {
-        crossRef.textContent = point.cross_reference || '';
-      }
-    } else {
-      const el = $('#tap-hint');
-      if (el) el.textContent = 'Last point reached. Tap "End" when done.';
-    }
+    // Update states
+    document.querySelectorAll('.live-plan-item').forEach((el, i) => {
+      el.classList.remove('active', 'past');
+      if (i < idx) el.classList.add('past');
+      if (i === idx) el.classList.add('active');
+    });
+
+    this.currentPointIndex = idx;
+
+    // Scroll into view
+    const activeItem = document.querySelector(`.live-plan-item[data-index="${idx}"]`);
+    activeItem?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   // --- Talk Live (Teleprompter) ---
 
   renderTalkLive() {
-    if (!this.currentEntry || this.talkSections.length === 0) {
-      location.hash = '#talk-prep';
+    if (!this.currentEntry) {
+      location.hash = '#talks';
       return;
     }
 
@@ -806,11 +913,22 @@ class App {
     this.timerSeconds = 0;
     this.currentSectionIndex = 0;
 
+    const hasSections = this.talkSections.length > 0;
+
     let sectionsHtml = '';
-    this.talkSections.forEach((text, i) => {
-      const state = i === 0 ? 'active' : 'upcoming';
-      sectionsHtml += `<div class="teleprompter-section ${state}" data-section="${i}">${text}</div>`;
-    });
+    if (hasSections) {
+      this.talkSections.forEach((text, i) => {
+        const state = i === 0 ? 'active' : 'upcoming';
+        sectionsHtml += `<div class="teleprompter-section ${state}" data-section="${i}">${text}</div>`;
+      });
+    } else {
+      sectionsHtml = `
+        <div class="no-plan-message">
+          <h3>Free-form Talk</h3>
+          <p>AI is listening and will provide delivery feedback.</p>
+        </div>
+      `;
+    }
 
     $('#screen-talk-live').innerHTML = `
       <div class="live-screen">
@@ -824,16 +942,23 @@ class App {
         </div>
 
         <div class="teleprompter" id="teleprompter-area">
-          <div class="teleprompter-progress" id="teleprompter-progress">
-            Section 1 of ${this.talkSections.length}
-          </div>
+          ${hasSections ? `<div class="teleprompter-progress" id="teleprompter-progress">Section 1 of ${this.talkSections.length}</div>` : ''}
           ${sectionsHtml}
         </div>
 
+        <button class="help-btn" id="help-btn" title="I need help">?</button>
+
         <div class="suggestion-bar" id="suggestion-bar">
-          <button class="suggestion-dismiss" id="dismiss-suggestion">&times;</button>
-          <div class="suggestion-label" id="suggestion-type">Delivery Tip</div>
+          <div class="suggestion-header">
+            <div class="suggestion-label" id="suggestion-label">
+              <span class="suggestion-type-icon" id="suggestion-icon">&#128161;</span>
+              <span id="suggestion-type">Delivery Tip</span>
+            </div>
+            <button class="suggestion-dismiss" id="dismiss-suggestion">&times;</button>
+          </div>
           <div class="suggestion-text" id="suggestion-text"></div>
+          <ul class="suggestion-bullets" id="suggestion-bullets"></ul>
+          <div class="suggestion-reference" id="suggestion-reference"></div>
         </div>
       </div>
     `;
@@ -841,16 +966,18 @@ class App {
     showScreen('screen-talk-live');
 
     // Tap to advance section
-    $('#teleprompter-area').addEventListener('click', () => {
-      this.advanceSection();
-    });
+    if (hasSections) {
+      $('#teleprompter-area').addEventListener('click', (e) => {
+        if (e.target.closest('.no-plan-message')) return;
+        this.advanceSection();
+      });
+    }
 
     this.startLiveCommon('talk');
   }
 
   advanceSection() {
     if (this.currentSectionIndex < this.talkSections.length - 1) {
-      // Mark current as past
       const current = document.querySelector(`.teleprompter-section[data-section="${this.currentSectionIndex}"]`);
       if (current) {
         current.classList.remove('active');
@@ -859,7 +986,6 @@ class App {
 
       this.currentSectionIndex++;
 
-      // Mark new as active
       const next = document.querySelector(`.teleprompter-section[data-section="${this.currentSectionIndex}"]`);
       if (next) {
         next.classList.remove('upcoming');
@@ -882,14 +1008,6 @@ class App {
       if (el) el.textContent = formatTime(this.timerSeconds);
     }, 1000);
 
-    // Tap to advance (lesson mode only — talk has its own handler)
-    if (mode === 'lesson') {
-      $('#live-main-area').addEventListener('click', (e) => {
-        if (e.target.closest('.transcript-preview')) return;
-        this.advancePoint();
-      });
-    }
-
     // Stop button
     $('#stop-lesson-btn').addEventListener('click', () => {
       this.saveCurrentSession();
@@ -903,6 +1021,38 @@ class App {
       this.hideSuggestion();
     });
 
+    // Help button
+    $('#help-btn').addEventListener('click', async () => {
+      if (this.helpRequested) return;
+      this.helpRequested = true;
+      const btn = $('#help-btn');
+      btn.classList.add('loading');
+      btn.textContent = '...';
+
+      try {
+        const transcript = this.speech.getTranscript();
+        const recent = transcript.slice(-500);
+        const currentPoint = mode === 'lesson'
+          ? (this.lessonPlan[this.currentPointIndex]?.question || '')
+          : (this.talkSections[this.currentSectionIndex] || '');
+
+        const suggestion = await this.ai.generateImmediateHelp(
+          recent,
+          this.currentEntry,
+          currentPoint,
+          this.hasNoPlan
+        );
+        this.showSuggestion(suggestion);
+      } catch (e) {
+        toast('Could not get help');
+        console.error(e);
+      }
+
+      btn.classList.remove('loading');
+      btn.textContent = '?';
+      this.helpRequested = false;
+    });
+
     // Speech
     this.speech.onStatusChange = (listening) => {
       const dot = $('#mic-dot');
@@ -914,7 +1064,7 @@ class App {
     this.speech.onTranscript = (text) => {
       const el = $('#transcript-text');
       if (el) {
-        const display = text.length > 200 ? '...' + text.slice(-200) : text;
+        const display = text.length > 150 ? '...' + text.slice(-150) : text;
         el.textContent = display;
       }
     };
@@ -928,7 +1078,8 @@ class App {
           suggestion = await this.ai.generateLiveSuggestion(
             chunk,
             this.currentEntry,
-            this.lessonPlan[this.currentPointIndex]?.question || ''
+            this.lessonPlan[this.currentPointIndex]?.question || '',
+            this.hasNoPlan
           );
         } else {
           suggestion = await this.ai.generateTalkDeliverySuggestion(
@@ -937,7 +1088,9 @@ class App {
             this.talkSections[this.currentSectionIndex] || ''
           );
         }
-        this.showSuggestion(suggestion);
+        if (suggestion.suggestion) {
+          this.showSuggestion(suggestion);
+        }
       } catch (e) {
         console.error('Live suggestion error:', e);
       }
@@ -956,7 +1109,8 @@ class App {
           mimeType,
           this.currentEntry,
           currentPoint,
-          mode
+          mode,
+          this.hasNoPlan
         );
         if (result.transcript) {
           this.speech.appendTranscript(result.transcript);
@@ -979,30 +1133,52 @@ class App {
   showSuggestion(suggestion) {
     const bar = $('#suggestion-bar');
     const typeEl = $('#suggestion-type');
+    const iconEl = $('#suggestion-icon');
     const textEl = $('#suggestion-text');
-    if (!bar || !typeEl || !textEl) return;
+    const bulletsEl = $('#suggestion-bullets');
+    const refEl = $('#suggestion-reference');
+    if (!bar || !textEl) return;
 
-    const typeLabels = {
-      question: 'Follow-up Question',
-      scripture: 'Scripture Reference',
-      redirect: 'Discussion Redirect',
-      pacing: 'Pacing',
-      transition: 'Transition',
-      emphasis: 'Emphasis',
-      encouragement: 'Encouragement'
+    const typeConfig = {
+      scripture: { label: 'Scripture', icon: '&#128214;' },
+      doctrine: { label: 'Doctrine', icon: '&#128220;' },
+      question: { label: 'Question', icon: '&#10067;' },
+      redirect: { label: 'Refocus', icon: '&#10145;' },
+      help: { label: 'Help', icon: '&#128161;' },
+      pacing: { label: 'Pacing', icon: '&#9201;' },
+      transition: { label: 'Transition', icon: '&#10145;' },
+      emphasis: { label: 'Emphasis', icon: '&#10071;' },
+      encouragement: { label: 'Encouragement', icon: '&#128079;' }
     };
 
-    typeEl.textContent = typeLabels[suggestion.type] || 'AI Suggestion';
-    textEl.textContent = suggestion.suggestion + (suggestion.detail ? ` (${suggestion.detail})` : '');
+    const config = typeConfig[suggestion.type] || { label: 'Suggestion', icon: '&#128161;' };
+
+    if (typeEl) typeEl.textContent = config.label;
+    if (iconEl) iconEl.innerHTML = config.icon;
+    textEl.textContent = suggestion.suggestion || '';
+
+    // Bullets
+    if (bulletsEl) {
+      bulletsEl.innerHTML = '';
+      if (suggestion.bullets?.length) {
+        suggestion.bullets.forEach(b => {
+          const li = document.createElement('li');
+          li.textContent = b;
+          bulletsEl.appendChild(li);
+        });
+      }
+    }
+
+    // Reference
+    if (refEl) {
+      refEl.textContent = suggestion.reference || '';
+      refEl.style.display = suggestion.reference ? '' : 'none';
+    }
 
     bar.classList.add('visible');
-
-    clearTimeout(this.suggestionHideTimer);
-    this.suggestionHideTimer = setTimeout(() => this.hideSuggestion(), 15000);
   }
 
   hideSuggestion() {
-    clearTimeout(this.suggestionHideTimer);
     const bar = $('#suggestion-bar');
     if (bar) bar.classList.remove('visible');
   }
@@ -1029,7 +1205,7 @@ class App {
     const title = this.mode === 'lesson' ? this.currentEntry.title : this.currentEntry.topic;
 
     if (this.mode === 'lesson') {
-      const coveredCount = Math.min(this.currentPointIndex + 1, this.lessonPlan.length);
+      const coveredCount = this.hasNoPlan ? 0 : Math.min(this.currentPointIndex + 1, this.lessonPlan.length);
       const totalCount = this.lessonPlan.length;
 
       $(`#${screenId}`).innerHTML = `
@@ -1040,40 +1216,44 @@ class App {
         </div>
         <div style="padding:16px;flex:1;overflow-y:auto">
           <div class="summary-header">
-            <h2>${title}</h2>
+            <h2>${title || 'Lesson'}</h2>
             <div class="summary-stat">
               <div class="stat">
                 <div class="stat-value">${durationMin}</div>
                 <div class="stat-label">Minutes</div>
               </div>
+              ${!this.hasNoPlan ? `
               <div class="stat">
                 <div class="stat-value">${coveredCount}/${totalCount}</div>
-                <div class="stat-label">Points Covered</div>
+                <div class="stat-label">Questions</div>
               </div>
+              ` : ''}
             </div>
           </div>
 
+          ${!this.hasNoPlan && this.lessonPlan.length > 0 ? `
           <div class="prep-section">
             <h3>Coverage</h3>
             <ul class="coverage-list" id="coverage-list"></ul>
           </div>
+          ` : ''}
 
           <div class="prep-section" id="ai-summary-section">
             <h3>AI Summary</h3>
             <div id="ai-summary-content">
               ${(this.ai.hasApiKey() && transcript)
-                ? '<div class="ai-loading"><div class="spinner"></div> Generating summary...</div>'
-                : '<p class="text-muted">No transcript available for summary.</p>'}
+                ? '<div class="ai-loading"><div class="spinner"></div> Generating...</div>'
+                : '<p class="text-muted">No transcript available.</p>'}
             </div>
           </div>
 
           <div class="summary-notes">
             <h3>Notes</h3>
-            <textarea id="summary-notes" placeholder="Add any personal notes about this lesson...">${this.currentEntry.notes || ''}</textarea>
+            <textarea id="summary-notes" placeholder="Add any notes...">${this.currentEntry.notes || ''}</textarea>
           </div>
 
           <div class="summary-actions mt-2">
-            <button class="btn btn-secondary" id="save-notes-btn">Save Notes</button>
+            <button class="btn btn-secondary" id="save-notes-btn">Save</button>
             <button class="btn btn-primary" id="done-btn">Done</button>
           </div>
         </div>
@@ -1082,17 +1262,19 @@ class App {
       showScreen(screenId);
 
       // Render coverage
-      const coverageList = $('#coverage-list');
-      this.lessonPlan.forEach((q, i) => {
-        const covered = i <= this.currentPointIndex;
-        const li = document.createElement('li');
-        li.className = 'coverage-item';
-        li.innerHTML = `
-          <span class="check ${covered ? 'covered' : 'missed'}">${covered ? '&#10003;' : '&#8211;'}</span>
-          <span>${q.question}</span>
-        `;
-        coverageList.appendChild(li);
-      });
+      if (!this.hasNoPlan && this.lessonPlan.length > 0) {
+        const coverageList = $('#coverage-list');
+        this.lessonPlan.forEach((q, i) => {
+          const covered = i <= this.currentPointIndex;
+          const li = document.createElement('li');
+          li.className = 'coverage-item';
+          li.innerHTML = `
+            <span class="check ${covered ? 'covered' : 'missed'}">${covered ? '&#10003;' : '&#8211;'}</span>
+            <span>${q.question}</span>
+          `;
+          coverageList.appendChild(li);
+        });
+      }
 
       // AI summary
       if (this.ai.hasApiKey() && transcript) {
@@ -1118,15 +1300,11 @@ class App {
         </div>
         <div style="padding:16px;flex:1;overflow-y:auto">
           <div class="summary-header">
-            <h2>${title}</h2>
+            <h2>${title || 'Talk'}</h2>
             <div class="summary-stat">
               <div class="stat">
                 <div class="stat-value">${durationMin}</div>
                 <div class="stat-label">Minutes</div>
-              </div>
-              <div class="stat">
-                <div class="stat-value">${this.currentSectionIndex + 1}/${this.talkSections.length}</div>
-                <div class="stat-label">Sections</div>
               </div>
             </div>
           </div>
@@ -1135,18 +1313,18 @@ class App {
             <h3>Delivery Feedback</h3>
             <div id="ai-summary-content">
               ${(this.ai.hasApiKey() && transcript)
-                ? '<div class="ai-loading"><div class="spinner"></div> Analyzing delivery...</div>'
-                : '<p class="text-muted">No transcript available for feedback.</p>'}
+                ? '<div class="ai-loading"><div class="spinner"></div> Analyzing...</div>'
+                : '<p class="text-muted">No transcript available.</p>'}
             </div>
           </div>
 
           <div class="summary-notes">
             <h3>Notes</h3>
-            <textarea id="summary-notes" placeholder="Add any notes about this talk...">${this.currentEntry.notes || ''}</textarea>
+            <textarea id="summary-notes" placeholder="Add any notes...">${this.currentEntry.notes || ''}</textarea>
           </div>
 
           <div class="summary-actions mt-2">
-            <button class="btn btn-secondary" id="save-notes-btn">Save Notes</button>
+            <button class="btn btn-secondary" id="save-notes-btn">Save</button>
             <button class="btn btn-primary" id="done-btn">Done</button>
           </div>
         </div>
@@ -1168,12 +1346,12 @@ class App {
       }
     }
 
-    // Save notes (shared)
+    // Save notes
     $('#save-notes-btn').addEventListener('click', () => {
       const notes = $('#summary-notes').value;
       this.currentEntry.notes = notes;
       this.saveCurrentSession();
-      toast('Notes saved');
+      toast('Saved');
     });
 
     // Done
@@ -1207,7 +1385,7 @@ class App {
 
     if (summary.followUp?.length) {
       html += '<div class="card">';
-      html += '<div class="label">Follow-up for Next Week</div>';
+      html += '<div class="label">Follow-up</div>';
       summary.followUp.forEach(f => {
         html += `<p style="margin-bottom:4px">&bull; ${f}</p>`;
       });
@@ -1241,7 +1419,7 @@ class App {
 
     if (summary.improvements?.length) {
       html += '<div class="card mb-2">';
-      html += '<div class="label">Areas to Improve</div>';
+      html += '<div class="label">Improvements</div>';
       summary.improvements.forEach(s => {
         html += `<p style="margin-bottom:4px;color:var(--warning)">&bull; ${s}</p>`;
       });
