@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lesson-companion-v3';
+const CACHE_NAME = 'lesson-companion-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -29,9 +29,8 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Network-first for API calls, cache-first for assets
   if (event.request.url.includes('generativelanguage.googleapis.com')) {
-    return; // Don't cache API calls
+    return;
   }
 
   event.respondWith(
