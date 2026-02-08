@@ -24,6 +24,7 @@ class App {
     this.timeWarningShown = {}; // track which warnings shown
     this.draggedBlockIndex = null;
     this.expandedBlockIndex = null; // for prep editing
+    this.isPaused = false; // pause AI during live mode
   }
 
   init() {
@@ -86,6 +87,29 @@ class App {
       }
       this.saveHistory('lc_talks', talks);
     }
+  }
+
+  // Save prep changes (blocks, title, content) immediately
+  savePrep() {
+    if (!this.currentEntry) return;
+
+    const key = this.mode === 'lesson' ? 'lc_lessons' : 'lc_talks';
+    const list = this.loadHistory(key);
+    const existing = list.findIndex(item => item.id === this.currentEntry.id);
+
+    const entry = {
+      ...this.currentEntry,
+      blocks: this.blocks,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (existing >= 0) {
+      list[existing] = entry;
+    } else {
+      list.unshift(entry);
+    }
+
+    this.saveHistory(key, list);
   }
 
   // --- Time Estimation ---
@@ -691,7 +715,19 @@ class App {
         $('#undo-bar').classList.add('hidden');
         this.renderBlocks();
         this.renderTimeEstimate();
+        this.savePrep();
       }
+    });
+
+    // Auto-save title/content on blur
+    $('#lesson-title-input').addEventListener('blur', () => {
+      this.currentEntry.title = $('#lesson-title-input').value.trim() || this.currentEntry.title;
+      this.savePrep();
+    });
+
+    $('#lesson-content-input').addEventListener('blur', () => {
+      this.currentEntry.content = $('#lesson-content-input').value.trim();
+      this.savePrep();
     });
 
     // Engagement toggle
@@ -778,6 +814,7 @@ class App {
           this.blocks = result.blocks;
           this.renderBlocks();
           this.renderTimeEstimate();
+          this.savePrep();
         }
 
         this.renderChatMessages();
@@ -925,7 +962,19 @@ class App {
         $('#undo-bar').classList.add('hidden');
         this.renderBlocks();
         this.renderTimeEstimate();
+        this.savePrep();
       }
+    });
+
+    // Auto-save topic/content on blur
+    $('#talk-topic-input').addEventListener('blur', () => {
+      this.currentEntry.topic = $('#talk-topic-input').value.trim() || this.currentEntry.topic;
+      this.savePrep();
+    });
+
+    $('#talk-content-input').addEventListener('blur', () => {
+      this.currentEntry.content = $('#talk-content-input').value.trim();
+      this.savePrep();
     });
 
     // Duration selector
@@ -1013,6 +1062,7 @@ class App {
           this.blocks = result.blocks;
           this.renderBlocks();
           this.renderTimeEstimate();
+          this.savePrep();
         }
 
         this.renderChatMessages();
@@ -1095,6 +1145,7 @@ class App {
       });
       this.renderBlocks();
       this.renderTimeEstimate();
+      this.savePrep();
     }
   }
 
@@ -1188,6 +1239,7 @@ class App {
           this.blocks.splice(i, 0, draggedBlock);
           this.expandedBlockIndex = null;
           this.renderBlocks();
+          this.savePrep();
         }
       });
 
@@ -1206,6 +1258,7 @@ class App {
         }, 5000);
         this.renderBlocks();
         this.renderTimeEstimate();
+        this.savePrep();
       });
 
       if (isExpanded) {
@@ -1223,6 +1276,7 @@ class App {
           block.notes = item.querySelector('.block-notes-input').value.trim();
           this.expandedBlockIndex = null;
           this.renderBlocks();
+          this.savePrep();
         });
       } else {
         // Click to edit (on display area, not drag handle)
@@ -1324,6 +1378,7 @@ class App {
 
         ${!this.isPractice ? `
         <div class="live-actions">
+          <button class="action-btn pause-btn" id="pause-btn" title="Pause AI">&#9208;</button>
           <button class="action-btn scripture-btn" id="scripture-btn" title="Lookup scripture">&#128214;</button>
           <button class="action-btn help-btn" id="help-btn" title="I need help">?</button>
         </div>
@@ -1481,6 +1536,28 @@ class App {
     });
 
     if (!this.isPractice) {
+      // Pause button
+      $('#pause-btn')?.addEventListener('click', () => {
+        this.isPaused = !this.isPaused;
+        const btn = $('#pause-btn');
+        const dot = $('#mic-dot');
+        const label = $('#mic-label');
+
+        if (this.isPaused) {
+          btn.innerHTML = '&#9654;'; // play icon
+          btn.classList.add('paused');
+          if (dot) dot.classList.remove('active');
+          if (label) label.textContent = 'Paused';
+          toast('AI paused');
+        } else {
+          btn.innerHTML = '&#9208;'; // pause icon
+          btn.classList.remove('paused');
+          if (dot && this.speech.isListening) dot.classList.add('active');
+          if (label) label.textContent = this.speech.isListening ? 'Listening' : 'Mic off';
+          toast('AI resumed');
+        }
+      });
+
       // Scripture lookup
       $('#scripture-btn')?.addEventListener('click', async () => {
         const ref = prompt('Enter scripture reference (e.g., Alma 32:21):');
@@ -1546,7 +1623,7 @@ class App {
       };
 
       this.speech.onChunkReady = async (chunk) => {
-        if (!this.ai.hasApiKey() || !this.isLive) return;
+        if (!this.ai.hasApiKey() || !this.isLive || this.isPaused) return;
         try {
           const currentBlock = this.blocks[this.currentBlockIndex]?.content || '';
           let suggestion;
@@ -1575,7 +1652,7 @@ class App {
       };
 
       this.speech.onAudioChunkReady = async (base64Audio, mimeType) => {
-        if (!this.ai.hasApiKey() || !this.isLive) return;
+        if (!this.ai.hasApiKey() || !this.isLive || this.isPaused) return;
         try {
           const currentBlock = this.blocks[this.currentBlockIndex]?.content || '';
 
@@ -1686,6 +1763,7 @@ class App {
   stopLive() {
     this.isLive = false;
     this.isPractice = false;
+    this.isPaused = false;
     clearInterval(this.timerInterval);
     this.speech.stop();
     this.hideSuggestion();

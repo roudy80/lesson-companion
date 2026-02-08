@@ -749,23 +749,32 @@ select {
 /* === Add Block Buttons === */
 .add-block-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+  border: 1px solid rgba(255,255,255,0.06);
 }
 
 .add-block-btn {
-  padding: 8px 12px;
-  background: var(--bg-surface);
-  border: 1px dashed rgba(255,255,255,0.15);
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 0.8125rem;
-  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
   cursor: pointer;
+  transition: all var(--transition);
 }
 
-.add-block-btn:hover { border-color: var(--accent); color: var(--accent); }
+.add-block-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(233,69,96,0.1);
+}
 
 /* === Prep Section === */
 .prep-section { margin-bottom: 24px; }
@@ -1138,6 +1147,18 @@ select {
   font-size: 1.25rem;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.action-btn.pause-btn {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 2px solid var(--text-muted);
+}
+
+.action-btn.pause-btn.paused {
+  background: var(--success);
+  color: var(--bg-primary);
+  border-color: var(--success);
 }
 
 .action-btn.scripture-btn {
