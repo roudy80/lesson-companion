@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lesson-companion-v9';
+const CACHE_NAME = 'lesson-companion-v10';
 const ASSETS = [
   './',
   './index.html',

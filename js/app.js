@@ -25,6 +25,8 @@ class App {
     this.draggedBlockIndex = null;
     this.expandedBlockIndex = null; // for prep editing
     this.isPaused = false; // pause AI during live mode
+    this.liveSuggestions = []; // store suggestions for after-action review
+    this.lastMatchedBlockIndex = -1; // for smart scroll
   }
 
   init() {
@@ -62,6 +64,7 @@ class App {
         blocks: this.blocks,
         transcript,
         duration,
+        liveSuggestions: this.liveSuggestions,
         updatedAt: new Date().toISOString()
       };
       if (existing >= 0) {
@@ -78,6 +81,7 @@ class App {
         blocks: this.blocks,
         transcript,
         duration,
+        liveSuggestions: this.liveSuggestions,
         updatedAt: new Date().toISOString()
       };
       if (existing >= 0) {
@@ -110,6 +114,84 @@ class App {
     }
 
     this.saveHistory(key, list);
+  }
+
+  // --- Smart Scroll (Voice Tracking) ---
+
+  /**
+   * Extract keywords from a block for voice matching.
+   */
+  getBlockKeywords(block) {
+    if (!block) return [];
+
+    const keywords = [];
+    const content = (block.content || '').toLowerCase();
+    const notes = (block.notes || '').toLowerCase();
+    const combined = content + ' ' + notes;
+
+    // Extract scripture references (e.g., "alma 32", "3 nephi 11", "d&c 4")
+    const scripturePattern = /\b(\d?\s*[a-z]+)\s+(\d+)(?::(\d+))?\b/gi;
+    let match;
+    while ((match = scripturePattern.exec(combined)) !== null) {
+      // Add book + chapter as keyword (e.g., "alma 32")
+      keywords.push(match[0].toLowerCase().replace(/\s+/g, ' ').trim());
+      // Also add just the book name
+      if (match[1]) keywords.push(match[1].toLowerCase().trim());
+    }
+
+    // Extract significant words (4+ chars, not common words)
+    const stopWords = new Set(['that', 'this', 'with', 'from', 'have', 'were', 'been', 'will', 'what', 'when', 'where', 'which', 'their', 'there', 'about', 'would', 'could', 'should', 'being', 'other', 'these', 'those', 'after', 'before', 'through', 'between', 'because', 'while', 'during']);
+
+    const words = combined.split(/\W+/).filter(w =>
+      w.length >= 4 && !stopWords.has(w) && !/^\d+$/.test(w)
+    );
+
+    // Take unique significant words
+    const uniqueWords = [...new Set(words)];
+    keywords.push(...uniqueWords.slice(0, 8)); // Max 8 content words
+
+    return keywords;
+  }
+
+  /**
+   * Check transcript against block keywords and auto-advance if match found.
+   */
+  checkSmartScroll(transcript) {
+    if (!this.blocks.length || this.isPaused) return;
+
+    const recentTranscript = transcript.slice(-300).toLowerCase();
+
+    // Check each block for keyword matches
+    let bestMatch = { index: -1, score: 0 };
+
+    this.blocks.forEach((block, i) => {
+      const keywords = this.getBlockKeywords(block);
+      let score = 0;
+
+      for (const keyword of keywords) {
+        if (recentTranscript.includes(keyword)) {
+          // Scripture references worth more
+          if (/\d/.test(keyword)) {
+            score += 3;
+          } else {
+            score += 1;
+          }
+        }
+      }
+
+      // Require minimum score and prefer forward progress
+      if (score >= 2 && score > bestMatch.score) {
+        bestMatch = { index: i, score };
+      }
+    });
+
+    // Auto-advance if we found a strong match different from current
+    if (bestMatch.index >= 0 &&
+        bestMatch.index !== this.currentBlockIndex &&
+        bestMatch.index !== this.lastMatchedBlockIndex) {
+      this.lastMatchedBlockIndex = bestMatch.index;
+      this.jumpToBlock(bestMatch.index);
+    }
   }
 
   // --- Time Estimation ---
@@ -1304,6 +1386,8 @@ class App {
     this.currentBlockIndex = 0;
     this.blockStartTimes = [0];
     this.timeWarningShown = {};
+    this.liveSuggestions = [];
+    this.lastMatchedBlockIndex = -1;
 
     const screenId = this.mode === 'lesson'
       ? (this.isPractice ? 'screen-lesson-practice' : 'screen-lesson-live')
@@ -1620,6 +1704,8 @@ class App {
           const display = text.length > 150 ? '...' + text.slice(-150) : text;
           el.textContent = display;
         }
+        // Smart scroll - check if we should auto-advance blocks
+        this.checkSmartScroll(text);
       };
 
       this.speech.onChunkReady = async (chunk) => {
@@ -1667,6 +1753,8 @@ class App {
 
           if (result.transcript) {
             this.speech.appendTranscript(result.transcript);
+            // Smart scroll for audio-based transcription
+            this.checkSmartScroll(this.speech.getTranscript());
           }
           if (result.suggestion) {
             this.showSuggestion(result);
@@ -1717,6 +1805,15 @@ class App {
     const bulletsEl = $('#suggestion-bullets');
     const refEl = $('#suggestion-reference');
     if (!bar || !textEl) return;
+
+    // Save for after-action review
+    if (suggestion.suggestion) {
+      this.liveSuggestions.push({
+        ...suggestion,
+        timestamp: this.timerSeconds,
+        blockIndex: this.currentBlockIndex
+      });
+    }
 
     const typeConfig = {
       scripture: { label: 'Scripture', icon: '&#128214;' },
@@ -1784,6 +1881,7 @@ class App {
     const title = this.mode === 'lesson' ? this.currentEntry.title : this.currentEntry.topic;
     const coveredBlocks = this.hasNoPlan ? 0 : Math.min(this.currentBlockIndex + 1, this.blocks.length);
     const totalBlocks = this.blocks.length;
+    const suggestions = this.liveSuggestions || this.currentEntry.liveSuggestions || [];
 
     $(`#${screenId}`).innerHTML = `
       <div class="header">
@@ -1817,6 +1915,16 @@ class App {
           </div>
         </div>
 
+        ${suggestions.length > 0 ? `
+        <div class="prep-section">
+          <div class="summary-section-header">
+            <h3>AI Suggestions During ${this.mode === 'lesson' ? 'Lesson' : 'Talk'}</h3>
+            <span class="suggestion-count">${suggestions.length}</span>
+          </div>
+          <div class="after-action-suggestions" id="after-action-suggestions"></div>
+        </div>
+        ` : ''}
+
         <div class="summary-notes">
           <h3>Notes</h3>
           <textarea id="summary-notes" placeholder="Add any notes...">${this.currentEntry.notes || ''}</textarea>
@@ -1830,6 +1938,11 @@ class App {
     `;
 
     showScreen(screenId);
+
+    // Render after-action suggestions
+    if (suggestions.length > 0) {
+      this.renderAfterActionSuggestions(suggestions);
+    }
 
     if (this.ai.hasApiKey() && transcript) {
       try {
@@ -1856,6 +1969,42 @@ class App {
       this.speech.reset();
       location.hash = backHash;
     });
+  }
+
+  renderAfterActionSuggestions(suggestions) {
+    const el = $('#after-action-suggestions');
+    if (!el) return;
+
+    const typeConfig = {
+      scripture: { label: 'Scripture', icon: '📖' },
+      doctrine: { label: 'Doctrine', icon: '📜' },
+      question: { label: 'Question', icon: '❓' },
+      redirect: { label: 'Refocus', icon: '➡' },
+      help: { label: 'Help', icon: '💡' },
+      pacing: { label: 'Pacing', icon: '⏱' },
+      transition: { label: 'Transition', icon: '➡' },
+      emphasis: { label: 'Emphasis', icon: '❗' },
+      encouragement: { label: 'Keep Going', icon: '👏' }
+    };
+
+    el.innerHTML = suggestions.map((s, i) => {
+      const config = typeConfig[s.type] || { label: 'Suggestion', icon: '💡' };
+      const timeStr = formatTime(s.timestamp || 0);
+      const blockLabel = this.blocks[s.blockIndex]?.content?.substring(0, 30) || '';
+
+      return `
+        <div class="after-action-item">
+          <div class="after-action-header">
+            <span class="after-action-type">${config.icon} ${config.label}</span>
+            <span class="after-action-time">${timeStr}</span>
+          </div>
+          <div class="after-action-text">${s.suggestion}</div>
+          ${s.bullets?.length ? `<ul class="after-action-bullets">${s.bullets.map(b => `<li>${b}</li>`).join('')}</ul>` : ''}
+          ${s.reference ? `<div class="after-action-ref">${s.reference}</div>` : ''}
+          ${blockLabel ? `<div class="after-action-block">During: ${blockLabel}...</div>` : ''}
+        </div>
+      `;
+    }).join('');
   }
 
   renderAISummary(summary) {

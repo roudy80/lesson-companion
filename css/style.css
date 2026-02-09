@@ -940,6 +940,89 @@ select {
 .summary-actions { display: flex; gap: 12px; margin-top: 20px; }
 .summary-actions .btn { flex: 1; }
 
+.summary-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.summary-section-header h3 { margin: 0; }
+
+.suggestion-count {
+  background: var(--gold);
+  color: var(--bg-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* === After-Action Suggestions === */
+.after-action-suggestions {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.after-action-item {
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border-left: 3px solid var(--gold);
+}
+
+.after-action-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.after-action-type {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.after-action-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.after-action-text {
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.after-action-bullets {
+  margin-top: 6px;
+  padding-left: 18px;
+}
+
+.after-action-bullets li {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.after-action-ref {
+  margin-top: 6px;
+  font-size: 0.8125rem;
+  color: var(--gold);
+  font-weight: 500;
+}
+
+.after-action-block {
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* === Utilities === */
 .mt-1 { margin-top: 8px; }
 .mt-2 { margin-top: 16px; }
